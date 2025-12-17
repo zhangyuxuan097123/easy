@@ -378,12 +378,26 @@ with tab_dashboard:
         with c1:
             # [修正] 視覺化 bug 修復：強制將 X 軸設為類別 (Category)，避免純數字站號導致的間距錯誤
             fig1 = go.Figure(go.Bar(x=stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
-            fig1.update_layout(title="各工作站耗損量", paper_bgcolor='white', plot_bgcolor='white', height=350, xaxis=dict(type='category'))
+            fig1.update_layout(
+                title="各工作站耗損量",
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                height=350,
+                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000'),
+                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000')
+            )
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
             # [修正] 視覺化 bug 修復：強制將 X 軸設為類別 (Category)
             fig2 = go.Figure(go.Bar(x=stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
-            fig2.update_layout(title="各工作站功率 (kW)", paper_bgcolor='white', plot_bgcolor='white', height=350, xaxis=dict(type='category'))
+            fig2.update_layout(
+                title="各工作站功率 (kW)",
+                paper_bgcolor='white',
+                plot_bgcolor='white',
+                height=350,
+                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000'),
+                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000')
+            )
             st.plotly_chart(fig2, use_container_width=True)
 
         # --- 系統可靠度敏感度分析 (維持前次修改: 臨界點 d=2523) ---
@@ -436,6 +450,27 @@ with tab_dashboard:
                 y=0.99,
                 xanchor="right",
                 x=0.99
+            ),
+            # [修正] 解決線條粗細不一致問題：
+            # 1. 強制所有線條寬度為 1 且全黑
+            # 2. 設定固定 tick 間距 (0.2)
+            # 3. 關閉 zeroline (避免與格線重疊變粗)
+            xaxis=dict(
+                color='#000000',
+                linecolor='#000000', linewidth=1,
+                tickcolor='#000000', tickwidth=1,
+                gridcolor='#000000', gridwidth=1,
+                zeroline=False,  # 關閉零線，只用格線
+            ),
+            yaxis=dict(
+                color='#000000',
+                linecolor='#000000', linewidth=1,
+                tickcolor='#000000', tickwidth=1,
+                gridcolor='#000000', gridwidth=1,
+                zeroline=False,  # 關閉零線，只用格線
+                tickmode='linear', # 強制線性刻度
+                tick0=0,
+                dtick=0.2          # 強制每 0.2 一格
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
@@ -452,7 +487,7 @@ with tab_dashboard:
         })
         st.dataframe(df_res, use_container_width=True)
 
-        # --- [修正] 計算公式區塊 (依照您提供的截圖還原，並刪除 "Stage 1 — 加工階段 (load)" 這一行) ---
+        # --- [修正] 計算公式區塊 (刪除 "Stage 1 — 加工階段 (load)" 這一行) ---
         st.divider()
         st.markdown("""
         ### 計算公式
@@ -462,7 +497,7 @@ with tab_dashboard:
         I = \\frac{d}{p^n}
         $$
         <div style="color:#cccccc; font-size:14px; margin-bottom: 20px;">
-        系統總輸入量計算公式，其中 p 是成功率，n 是工作站數量。
+        系統總輸入量計算公式，其中 p 是成功率，n 是工作站數量 (固定為 5)。
         </div>
 
         #### <span style="color:#f3a21a">工作站 i 的輸入量計算公式</span>
@@ -473,7 +508,7 @@ with tab_dashboard:
         工作站 i 的輸入量計算公式。表示從第一個工作站開始，每個工作站的輸入量隨成功率的指數遞減。
         </div>
 
-        ### 碳排放公式
+        ### 碳排放分階段公式
 
         $$
         E_{k,i}^{load} = P_{k,i}^{load} \\cdot t_{k,i}^{load} \\cdot \\lambda
