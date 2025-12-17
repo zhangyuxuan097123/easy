@@ -377,26 +377,28 @@ with tab_dashboard:
         c1, c2 = st.columns(2)
         with c1:
             # [修正] 視覺化 bug 修復：強制將 X 軸設為類別 (Category)，避免純數字站號導致的間距錯誤
+            # [修正] 座標軸字體強化：黑色、14px、Arial
             fig1 = go.Figure(go.Bar(x=stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
             fig1.update_layout(
                 title="各工作站耗損量",
                 paper_bgcolor='white',
                 plot_bgcolor='white',
                 height=350,
-                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000'),
-                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000')
+                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial')),
+                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial'))
             )
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
             # [修正] 視覺化 bug 修復：強制將 X 軸設為類別 (Category)
+            # [修正] 座標軸字體強化：黑色、14px、Arial
             fig2 = go.Figure(go.Bar(x=stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
             fig2.update_layout(
                 title="各工作站功率 (kW)",
                 paper_bgcolor='white',
                 plot_bgcolor='white',
                 height=350,
-                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000'),
-                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000')
+                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial')),
+                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial'))
             )
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -451,16 +453,15 @@ with tab_dashboard:
                 xanchor="right",
                 x=0.99
             ),
-            # [修正] 解決線條粗細不一致問題：
-            # 1. 強制所有線條寬度為 1 且全黑
-            # 2. 設定固定 tick 間距 (0.2)
-            # 3. 關閉 zeroline (避免與格線重疊變粗)
+            # [修正] 座標軸字體強化：黑色、14px、Arial
+            # [保留] 線條粗細為 1 且全黑
             xaxis=dict(
                 color='#000000',
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
                 gridcolor='#000000', gridwidth=1,
                 zeroline=False,  # 關閉零線，只用格線
+                tickfont=dict(size=14, color='#000000', family='Arial')
             ),
             yaxis=dict(
                 color='#000000',
@@ -470,7 +471,8 @@ with tab_dashboard:
                 zeroline=False,  # 關閉零線，只用格線
                 tickmode='linear', # 強制線性刻度
                 tick0=0,
-                dtick=0.2          # 強制每 0.2 一格
+                dtick=0.2,          # 強制每 0.2 一格
+                tickfont=dict(size=14, color='#000000', family='Arial')
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
