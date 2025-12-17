@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 
 # --- 0. 基本設定 ---
-st.set_page_config(page_title="製造系統可靠性戰情室 (Excel 權威版)", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="製造系統可靠性戰情室", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
 
 # 預設 Excel 路徑
 DEFAULT_EXCEL_PATH = "新版簡單.xlsx"
@@ -259,7 +259,7 @@ def calculate_metrics(demand, carbon_factor, _station_data):
 # --- 4. UI 顯示 ---
 st.markdown("""
 <div style="padding:14px 10px; border-radius:10px; background: linear-gradient(90deg, rgba(6,21,39,0.6), rgba(8,30,46,0.35)); box-shadow:0 6px 18px rgba(2,8,23,0.6); margin-bottom:12px;">
-<h1 style="margin:0;color:#e6f7ff">🏭 製造系統可靠性戰情室 (Excel 權威版)</h1>
+<h1 style="margin:0;color:#e6f7ff">🏭 製造系統可靠性戰情室</h1>
 <div style="color:#bcd7ea; margin-top:6px;">數據核心邏輯已同步新版 Excel - 能耗與碳排為靜態計算</div>
 </div>
 """, unsafe_allow_html=True)
@@ -336,7 +336,7 @@ with tab_dashboard:
         for i, col in enumerate(topo_cols):
             with col:
                 st.markdown(f"""<div style="position: relative; width: 100%; text-align: center;"><div class="topo-node {node_states[i]}">{STATION_DATA[i]["id"]}</div>{'<div class="topo-connector"></div>' if i < FIXED_N - 1 else ''}</div>""", unsafe_allow_html=True)
-                if st.button("詳細內容", key=f"btn_node_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
+                if st.button("檢視", key=f"btn_node_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
                     st.session_state.selected_node_idx = i
                     st.rerun()
 
@@ -454,8 +454,9 @@ with tab_dashboard:
                 x=0.99
             ),
             # [修正] 座標軸字體強化：黑色、14px、Arial
-            # [保留] 線條粗細為 1 且全黑
+            # [修正] 座標軸標題 (Title) 與數字 (Tick) 格式完全一致：黑色、14px、Arial
             xaxis=dict(
+                title_font=dict(size=14, color='#000000', family='Arial'),
                 color='#000000',
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
@@ -464,6 +465,7 @@ with tab_dashboard:
                 tickfont=dict(size=14, color='#000000', family='Arial')
             ),
             yaxis=dict(
+                title_font=dict(size=14, color='#000000', family='Arial'),
                 color='#000000',
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
