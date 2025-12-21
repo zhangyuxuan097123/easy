@@ -8,6 +8,7 @@ import os
 import io
 import time
 from datetime import datetime
+import streamlit.components.v1 as components  # [新增] 用於執行切換分頁的 JS
 
 # --- 0. 基本設定 ---
 st.set_page_config(page_title="製造系統可靠性戰情室", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
@@ -15,7 +16,7 @@ st.set_page_config(page_title="製造系統可靠性戰情室", page_icon="🏭"
 # 預設 Excel 路徑
 DEFAULT_EXCEL_PATH = "新版簡單.xlsx"
 
-# --- 1. 全局 CSS 與 Modal 樣式 ---
+# --- 1. 全局 CSS 與 Modal 樣式 (完全還原) ---
 st.markdown(
     """
     <style>
@@ -69,7 +70,7 @@ st.markdown(
 
     .detail-card-highlight { border: 2px solid #3fe6ff; background: rgba(63, 230, 255, 0.1); padding: 15px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; }
     [data-testid="stPlotlyChart"] { background-color: #ffffff !important; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.20); padding: 10px; margin-bottom: 20px; }
-    
+     
     /* 成功儲存 Modal 樣式：加入 pointer-events 與 z-index 控制 */
     .success-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -90,7 +91,7 @@ st.markdown(
         70% { opacity: 1; pointer-events: auto; }
         100% { opacity: 0; pointer-events: none; z-index: -1; }
     }
-    
+     
     /* Tabs 未選取狀態文字顏色修正 */
     button[data-baseweb="tab"][aria-selected="false"] {
         color: #FFFFFF !important;
@@ -193,6 +194,10 @@ if "df_data" not in st.session_state:
     st.session_state.df_data = df_loaded
     st.session_state.excel_authority = excel_auth_data 
 
+# [新增] 初始化分頁切換控制旗標
+if "switch_to_dashboard" not in st.session_state:
+    st.session_state.switch_to_dashboard = False
+
 # 防呆檢查
 if st.session_state.excel_authority is None:
     st.session_state.excel_authority = {"d": 2500, "carbon_factor": 0.474}
@@ -264,7 +269,26 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# [還原] 使用原本的 Tabs 結構
 tab_dashboard, tab_editor = st.tabs(["📊 戰情儀表板 (Dashboard)", "📝 資料管理 (Excel 編輯)"])
+
+# [新增] 隱藏的 JS 觸發器：只有當 flag 為 True 時，才執行 JS 模擬點擊 Dashboard 分頁
+if st.session_state.switch_to_dashboard:
+    components.html(
+        """
+        <script>
+            // 尋找所有 tab 按鈕
+            var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+            if (tabs.length > 0) {
+                // 點擊第一個分頁 (Dashboard)
+                tabs[0].click();
+            }
+        </script>
+        """,
+        height=0, width=0
+    )
+    # 執行完畢後立即關閉 flag
+    st.session_state.switch_to_dashboard = False
 
 # --- TAB 1: Dashboard ---
 with tab_dashboard:
@@ -541,10 +565,13 @@ with tab_editor:
                 st.error(f"讀取失敗: {e}")
 
     df_source = st.session_state.df_data.copy()
+    
+    # [新增] key="editor_table" 確保在 rerunning 時 Streamlit 知道這是同一個元件，避免跳轉
     edited_df = st.data_editor(
         df_source[['Station', 'p', 'power', 'capacities', 'probs']],
         num_rows="dynamic",
         use_container_width=True,
+        key="editor_table", 
         column_config={
             "Station": st.column_config.NumberColumn("站號", min_value=1, step=1, required=True),
             "p": st.column_config.NumberColumn("成功率 p", min_value=0.0001, max_value=1.0),
@@ -622,8 +649,9 @@ with tab_editor:
                 st.session_state.df_data = edited_df
                 st.session_state.excel_authority = {"d": curr_d, "carbon_factor": curr_c}
                 
-                # 5. 設定旗標以在重整後觸發 Modal
+                # 5. [核心修正] 設定 flag，重整後 JS 會自動點擊 Dashboard 分頁
                 st.session_state.show_success_modal = True
+                st.session_state.switch_to_dashboard = True
                 st.rerun()
 
             except Exception as e:
