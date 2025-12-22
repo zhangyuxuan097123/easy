@@ -528,7 +528,7 @@ with tab_editor:
     st.subheader("Excel 資料編輯器 (支援動態長度)")
     col_upload, col_settings = st.columns([2, 1])
     with col_upload:
-        uploaded_file = st.file_uploader("📂 上傳 Excel (新版簡單格式)", type=["xlsx"])
+        uploaded_file = st.file_uploader("📂 上傳 Excel", type=["xlsx"])
 
     if uploaded_file:
         file_id = f"{uploaded_file.name}_{uploaded_file.size}"
