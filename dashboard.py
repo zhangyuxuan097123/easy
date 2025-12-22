@@ -8,7 +8,7 @@ import os
 import io
 import time
 from datetime import datetime
-import streamlit.components.v1 as components  # [新增] 用於執行切換分頁的 JS
+import streamlit.components.v1 as components
 
 # --- 0. 基本設定 ---
 st.set_page_config(page_title="製造系統可靠性戰情室", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
@@ -16,7 +16,7 @@ st.set_page_config(page_title="製造系統可靠性戰情室", page_icon="🏭"
 # 預設 Excel 路徑
 DEFAULT_EXCEL_PATH = "新版簡單.xlsx"
 
-# --- 1. 全局 CSS 與 Modal 樣式 (完全還原) ---
+# --- 1. 全局 CSS 與 Modal 樣式 (完全保留原版面) ---
 st.markdown(
     """
     <style>
@@ -71,7 +71,7 @@ st.markdown(
     .detail-card-highlight { border: 2px solid #3fe6ff; background: rgba(63, 230, 255, 0.1); padding: 15px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; }
     [data-testid="stPlotlyChart"] { background-color: #ffffff !important; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.20); padding: 10px; margin-bottom: 20px; }
      
-    /* 成功儲存 Modal 樣式：加入 pointer-events 與 z-index 控制 */
+    /* 成功儲存 Modal 樣式 */
     .success-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0, 0, 0, 0.6);
@@ -91,7 +91,7 @@ st.markdown(
         70% { opacity: 1; pointer-events: auto; }
         100% { opacity: 0; pointer-events: none; z-index: -1; }
     }
-     
+    
     /* Tabs 未選取狀態文字顏色修正 */
     button[data-baseweb="tab"][aria-selected="false"] {
         color: #FFFFFF !important;
@@ -194,9 +194,9 @@ if "df_data" not in st.session_state:
     st.session_state.df_data = df_loaded
     st.session_state.excel_authority = excel_auth_data 
 
-# [新增] 初始化分頁切換控制旗標
-if "switch_to_dashboard" not in st.session_state:
-    st.session_state.switch_to_dashboard = False
+# [新增] 用來控制分頁鎖定的變數： None=不強制, 0=強制Dashboard, 1=強制Editor
+if "force_tab_index" not in st.session_state:
+    st.session_state.force_tab_index = None
 
 # 防呆檢查
 if st.session_state.excel_authority is None:
@@ -272,23 +272,26 @@ st.markdown("""
 # [還原] 使用原本的 Tabs 結構
 tab_dashboard, tab_editor = st.tabs(["📊 戰情儀表板 (Dashboard)", "📝 資料管理 (Excel 編輯)"])
 
-# [新增] 隱藏的 JS 觸發器：只有當 flag 為 True 時，才執行 JS 模擬點擊 Dashboard 分頁
-if st.session_state.switch_to_dashboard:
+# [核心功能]：分頁控制器 (JS Injection)
+# 如果 force_tab_index 不是 None，則注入 JS 強制點擊該分頁，然後重置變數
+if st.session_state.force_tab_index is not None:
+    target_index = st.session_state.force_tab_index
     components.html(
-        """
+        f"""
         <script>
-            // 尋找所有 tab 按鈕
-            var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
-            if (tabs.length > 0) {
-                // 點擊第一個分頁 (Dashboard)
-                tabs[0].click();
-            }
+            // 等待一點時間確保 DOM 載入
+            setTimeout(function() {{
+                var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
+                if (tabs.length > {target_index}) {{
+                    tabs[{target_index}].click();
+                }}
+            }}, 150);
         </script>
         """,
         height=0, width=0
     )
-    # 執行完畢後立即關閉 flag
-    st.session_state.switch_to_dashboard = False
+    # 執行一次後，將強制狀態解除，讓使用者可以自由切換，直到下一次特定事件發生
+    st.session_state.force_tab_index = None
 
 # --- TAB 1: Dashboard ---
 with tab_dashboard:
@@ -300,7 +303,6 @@ with tab_dashboard:
             caps = parse_list_from_string(row['capacities'])
             probs = parse_list_from_string(row['probs'])
             
-            # [修正] 移除 "Station" 字樣，僅保留數字
             STATION_DATA.append({
                 "name": f"{int(row['Station'])}", 
                 "id": int(row['Station']),
@@ -371,8 +373,6 @@ with tab_dashboard:
                 st_carbon = d_st['power'] * carbon_factor
                 st_loss = res['losses'][idx]
                 
-                # [修正] 詳細卡片：將碳排放與耗損位置對調 (Carbon @ 4, Loss @ 5)
-                # [修正] 耗損小數點改為 .3f
                 st.markdown(f"""
                 <div class="detail-card-highlight">
                 <h5 style="margin-bottom: 15px; color: #fff;">🔍 {d_st["name"]} 詳細數據</h5>
@@ -390,8 +390,6 @@ with tab_dashboard:
         with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">總功率 (kW)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
         c_color = "green" if sys_carbon < 250 else "yellow" if sys_carbon < 300 else "red"
         
-        # [修正] KPI：總碳排放與總耗損位置對調 (Total Carbon @ k4, Total Loss @ k5)
-        # [修正] 總耗損小數點改為 .3f
         with k4: st.markdown(f'<div class="kpi-box kpi-border-{c_color}"><div class="kpi-label">總碳排放 (kg)</div><div class="kpi-value">{res["carbon_emission"]:.3f}</div></div>', unsafe_allow_html=True)
         with k5: st.markdown(f'<div class="kpi-box kpi-border-red"><div class="kpi-label">總耗損 (qty)</div><div class="kpi-value">{res["total_loss"]:.3f}</div></div>', unsafe_allow_html=True)
 
@@ -400,8 +398,6 @@ with tab_dashboard:
         stations = [d["name"] for d in STATION_DATA]
         c1, c2 = st.columns(2)
         with c1:
-            # [修正] 視覺化 bug 修復：強制將 X 軸設為類別 (Category)，避免純數字站號導致的間距錯誤
-            # [修正] 座標軸字體強化：黑色、14px、Arial
             fig1 = go.Figure(go.Bar(x=stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
             fig1.update_layout(
                 title="各工作站耗損量",
@@ -413,8 +409,6 @@ with tab_dashboard:
             )
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
-            # [修正] 視覺化 bug 修復：強制將 X 軸設為類別 (Category)
-            # [修正] 座標軸字體強化：黑色、14px、Arial
             fig2 = go.Figure(go.Bar(x=stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
             fig2.update_layout(
                 title="各工作站功率 (kW)",
@@ -426,23 +420,19 @@ with tab_dashboard:
             )
             st.plotly_chart(fig2, use_container_width=True)
 
-        # --- 系統可靠度敏感度分析 (維持前次修改: 臨界點 d=2523) ---
         st.markdown("### 📉 系統可靠度敏感度分析")
         
-        # 產生 d_range
         d_range_vals = np.arange(500, 5501, 500)
         y_vals = []
         for val in d_range_vals:
              y_vals.append(calculate_metrics(val, carbon_factor, STATION_DATA)['reliability'])
 
-        # 臨界點設定
         crit_d = 2523
         crit_res = calculate_metrics(crit_d, carbon_factor, STATION_DATA)
         crit_y = crit_res['reliability']
 
         fig3 = go.Figure()
         
-        # 1. 可靠度曲線
         fig3.add_trace(go.Scatter(
             x=d_range_vals, 
             y=y_vals,
@@ -452,7 +442,6 @@ with tab_dashboard:
             marker=dict(size=8, color='#3fe6ff')
         ))
 
-        # 2. 臨界點
         fig3.add_trace(go.Scatter(
             x=[crit_d], 
             y=[crit_y],
@@ -471,21 +460,14 @@ with tab_dashboard:
             plot_bgcolor='white',
             height=400,
             margin=dict(l=20, r=20, t=40, b=20),
-            legend=dict(
-                yanchor="top",
-                y=0.99,
-                xanchor="right",
-                x=0.99
-            ),
-            # [修正] 座標軸字體強化：黑色、14px、Arial
-            # [修正] 座標軸標題 (Title) 與數字 (Tick) 格式完全一致：黑色、14px、Arial
+            legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99),
             xaxis=dict(
                 title_font=dict(size=14, color='#000000', family='Arial'),
                 color='#000000',
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
                 gridcolor='#000000', gridwidth=1,
-                zeroline=False,  # 關閉零線，只用格線
+                zeroline=False,
                 tickfont=dict(size=14, color='#000000', family='Arial')
             ),
             yaxis=dict(
@@ -494,15 +476,14 @@ with tab_dashboard:
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
                 gridcolor='#000000', gridwidth=1,
-                zeroline=False,  # 關閉零線，只用格線
-                tickmode='linear', # 強制線性刻度
+                zeroline=False,
+                tickmode='linear',
                 tick0=0,
-                dtick=0.2,          # 強制每 0.2 一格
+                dtick=0.2,
                 tickfont=dict(size=14, color='#000000', family='Arial')
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
-        # --- 結束插入 ---
 
         st.header("📋 工作站狀態表")
         df_res = pd.DataFrame({
@@ -515,7 +496,6 @@ with tab_dashboard:
         })
         st.dataframe(df_res, use_container_width=True)
 
-        # --- [修正] 計算公式區塊 (刪除 "Stage 1 — 加工階段 (load)" 這一行) ---
         st.divider()
         st.markdown("""
         ### 計算公式
@@ -542,7 +522,6 @@ with tab_dashboard:
         E_{k,i}^{load} = P_{k,i}^{load} \\cdot t_{k,i}^{load} \\cdot \\lambda
         $$
         """, unsafe_allow_html=True)
-        # --- 結束修正 ---
 
 # --- TAB 2: Editor ---
 with tab_editor:
@@ -560,18 +539,29 @@ with tab_editor:
                 if new_scalars: st.session_state.excel_authority = new_scalars
                 st.session_state.processed_file_id = file_id
                 st.session_state.last_uploaded_name = uploaded_file.name
+                
+                # [新增] 清除編輯器的快取狀態，強制顯示新上傳的 Excel 內容
+                if "editor_table" in st.session_state:
+                    del st.session_state["editor_table"]
+
+                # 上傳後也強制保持在編輯頁面
+                st.session_state.force_tab_index = 1
                 st.rerun()
             except Exception as e:
                 st.error(f"讀取失敗: {e}")
 
     df_source = st.session_state.df_data.copy()
     
-    # [新增] key="editor_table" 確保在 rerunning 時 Streamlit 知道這是同一個元件，避免跳轉
+    # [Callback] 當數據編輯器發生變更時，強制鎖定分頁 Index 為 1 (Editor)
+    def maintain_editor_tab():
+        st.session_state.force_tab_index = 1
+
     edited_df = st.data_editor(
         df_source[['Station', 'p', 'power', 'capacities', 'probs']],
         num_rows="dynamic",
         use_container_width=True,
         key="editor_table", 
+        on_change=maintain_editor_tab,  # 綁定 Callback
         column_config={
             "Station": st.column_config.NumberColumn("站號", min_value=1, step=1, required=True),
             "p": st.column_config.NumberColumn("成功率 p", min_value=0.0001, max_value=1.0),
@@ -585,6 +575,7 @@ with tab_editor:
     with col_reset:
         if st.button("🔄 重置為預設資料", use_container_width=True):
             st.session_state.df_data = get_default_data()
+            st.session_state.force_tab_index = 1  # 重置後還是留在編輯頁
             st.rerun()
 
     with col_save:
@@ -596,7 +587,6 @@ with tab_editor:
                     caps = parse_list_from_string(row['capacities'])
                     probs = parse_list_from_string(row['probs'])
                     
-                    # [修正] 錯誤訊息改為中文 "站號"，移除 "Station"
                     if not isinstance(caps, list) or not isinstance(probs, list):
                         st.error(f"站號 {row['Station']}: 列表格式錯誤"); st.stop()
                     if len(caps) != len(probs):
@@ -608,7 +598,7 @@ with tab_editor:
                     
                     validated_rows.append((row, caps, probs))
 
-                # 2. 寫入 (Long Format - 動態長度)
+                # 2. 寫入
                 long_rows = []
                 for row, caps, probs in validated_rows:
                     for i in range(len(caps)):
@@ -623,19 +613,16 @@ with tab_editor:
                 
                 df_long = pd.DataFrame(long_rows)
                 
-                # 3. 注入 Scalars (模擬 Excel 結構)
                 for i in range(6, 14): df_long[f"Unnamed: {i}"] = np.nan
                 while len(df_long) < 5:
                     df_long = pd.concat([df_long, pd.DataFrame([np.nan]*df_long.shape[1], columns=df_long.columns)], ignore_index=True)
                 
-                # 安全讀取 Auth Data
                 auth_data = st.session_state.get("excel_authority")
                 if auth_data is None: auth_data = {"d": 2500, "carbon_factor": 0.474}
                 
                 curr_d = auth_data.get("d", 2500)
                 curr_c = auth_data.get("carbon_factor", 0.474)
                 
-                # 精確寫入
                 df_long.iloc[1, 7] = "d="
                 df_long.iloc[1, 8] = curr_d
                 df_long.iloc[2, 7] = "CO2="
@@ -645,13 +632,13 @@ with tab_editor:
                 save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), save_name)
                 df_long.to_excel(save_path, index=False)
                 
-                # 4. [關鍵連動修正]：立即更新 Session State 並觸發 Rerun
+                # 3. 更新與跳轉
                 st.session_state.df_data = edited_df
                 st.session_state.excel_authority = {"d": curr_d, "carbon_factor": curr_c}
-                
-                # 5. [核心修正] 設定 flag，重整後 JS 會自動點擊 Dashboard 分頁
                 st.session_state.show_success_modal = True
-                st.session_state.switch_to_dashboard = True
+                
+                # [關鍵] 儲存成功：強制跳轉回 Dashboard (Index 0)
+                st.session_state.force_tab_index = 0
                 st.rerun()
 
             except Exception as e:
