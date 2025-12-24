@@ -11,7 +11,7 @@ from datetime import datetime
 import streamlit.components.v1 as components
 
 # --- 0. 基本設定 ---
-st.set_page_config(page_title="製造系統可靠性戰情室", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="基於生成式AI與網路可靠度於製造系統戰情儀表設計", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
 
 # 預設 Excel 路徑
 DEFAULT_EXCEL_PATH = "新版簡單.xlsx"
@@ -59,18 +59,138 @@ st.markdown(
     @keyframes kpiShake { 0% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,107,107,0); } 25% { transform: translateX(-5px) rotate(-1deg); box-shadow: 0 0 15px rgba(255,107,107,0.5); } 50% { transform: translateX(5px) rotate(1deg); box-shadow: 0 0 25px rgba(255,107,107,0.8); } 75% { transform: translateX(-5px) rotate(-1deg); box-shadow: 0 0 15px rgba(255,107,107,0.5); } 100% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,107,107,0); } }
     .kpi-shake { animation: kpiShake 0.5s infinite; border-color: #ff6b6b !important; }
 
-    /* 拓樸圖 */
-    .topo-node { width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #fff; margin: 0 auto 10px auto; border: 3px solid rgba(255,255,255,0.3); box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: all 0.3s ease; position: relative; z-index: 2; }
-    .topo-connector { position: absolute; top: 30px; left: 50%; width: 100%; height: 2px; background: rgba(255,255,255,0.2); z-index: 1; }
+    /* --- [修改] 拓樸圖全新樣式 (解決重疊與美觀問題) --- */
+    
+    /* 1. 容器設定：確保內容可視，不會被裁切 */
+    .topo-container {
+        position: relative;
+        width: 100%;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: visible !important; /* 關鍵：讓 Input/Output 可以凸出去 */
+    }
+
+    /* 2. 節點圓圈 (半徑約 30px) */
+    .topo-node { 
+        width: 60px; height: 60px; 
+        border-radius: 50%; 
+        display: flex; align-items: center; justify-content: center; 
+        font-weight: bold; font-size: 1.2rem; color: #fff; 
+        border: 3px solid rgba(255,255,255,0.3); 
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3); 
+        transition: all 0.3s ease; 
+        position: relative; 
+        z-index: 2; /* 確保圓圈蓋在線條上 */
+        background: #23395B; /* 預設背景 */
+    }
+    
+    /* 狀態顏色 */
     .node-green { background: linear-gradient(135deg, #4cd37a, #218838); box-shadow: 0 0 15px rgba(76, 211, 122, 0.4); }
     .node-yellow { background: linear-gradient(135deg, #ffd86b, #e0a800); box-shadow: 0 0 15px rgba(255, 216, 107, 0.4); }
     .node-red { background: linear-gradient(135deg, #ff6b6b, #c82333); box-shadow: 0 0 15px rgba(255, 107, 107, 0.6); }
     .node-fail { background: #8B0000 !important; animation: failBlink 0.8s infinite, kpiShake 0.4s infinite !important; box-shadow: 0 0 30px rgba(255, 0, 0, 0.8) !important; z-index: 10; }
-    .node-fail::after { content: "FAIL"; position: absolute; top: -20px; color: #ff6b6b; font-weight: 900; font-size: 14px; text-shadow: 0 2px 4px #000; }
+    .node-fail::after { content: "FAIL"; position: absolute; top: -25px; color: #ff6b6b; font-weight: 900; font-size: 14px; text-shadow: 0 2px 4px #000; left: 50%; transform: translateX(-50%); }
+
+    /* [修改] 3. 節點左側的連接線 (從左側節點中心到目前節點中心) */
+    .pre-connector-line {
+        position: absolute;
+        top: 50%;
+        right: 50%; /* 從目前節點中心向左延伸 */
+        width: 100%; /* 延伸到上一個節點中心 (Streamlit Columns 等寬) */
+        height: 2px;
+        background: #cccccc; /* 實心灰色 */
+        transform: translateY(-50%);
+        z-index: 1;
+    }
+    /* 連接線中間的箭頭 (實心，靠近節點左側) */
+    .pre-connector-line::after {
+        content: '';
+        position: absolute;
+        top: -4px;
+        width: 0;
+        height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 8px solid #cccccc; /* 實心灰色箭頭 */
+        /* [關鍵修改] 35px 確保箭頭在圓圈(半徑30px)的外部左側，不會被蓋住 */
+        right: 35px; 
+    }
+
+    /* 4. Input 區塊 (絕對定位於節點左側，實心) */
+    .input-group {
+        position: absolute;
+        right: 50%; /* 從中心點開始算 */
+        margin-right: 35px; /* 向左推：半徑(30) + 間距(5) */
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        white-space: nowrap; /* 強制不換行 */
+        z-index: 5;
+    }
+    .input-label {
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        margin-right: 8px;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+    .input-arrow {
+        width: 40px;
+        height: 2px;
+        background: #cccccc; /* [修改] 實心灰色 */
+        position: relative;
+    }
+    .input-arrow::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: -4px;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 8px solid #cccccc; /* [修改] 實心灰色箭頭 */
+    }
+
+    /* 5. Output 區塊 (絕對定位於節點右側，實心) */
+    .output-group {
+        position: absolute;
+        left: 50%; /* 從中心點開始算 */
+        margin-left: 35px; /* 向右推：半徑(30) + 間距(5) */
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        white-space: nowrap; /* 強制不換行 */
+        z-index: 5;
+    }
+    .output-label {
+        color: #fff;
+        font-weight: 700;
+        font-size: 16px;
+        margin-left: 8px;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    }
+    .output-arrow {
+        width: 40px;
+        height: 2px;
+        background: #cccccc; /* [修改] 實心灰色 */
+        position: relative;
+    }
+    .output-arrow::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: -4px;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 8px solid #cccccc; /* [修改] 實心灰色箭頭 */
+    }
 
     .detail-card-highlight { border: 2px solid #3fe6ff; background: rgba(63, 230, 255, 0.1); padding: 15px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; }
     [data-testid="stPlotlyChart"] { background-color: #ffffff !important; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.20); padding: 10px; margin-bottom: 20px; }
-     
+      
     /* 成功儲存 Modal 樣式 */
     .success-modal-overlay {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
@@ -264,8 +384,7 @@ def calculate_metrics(demand, carbon_factor, _station_data):
 # --- 4. UI 顯示 ---
 st.markdown("""
 <div style="padding:14px 10px; border-radius:10px; background: linear-gradient(90deg, rgba(6,21,39,0.6), rgba(8,30,46,0.35)); box-shadow:0 6px 18px rgba(2,8,23,0.6); margin-bottom:12px;">
-<h1 style="margin:0;color:#e6f7ff">🏭 製造系統可靠性戰情室</h1>
-<div style="color:#bcd7ea; margin-top:6px;">數據核心邏輯已同步新版 Excel - 能耗與碳排為靜態計算</div>
+<h1 style="margin:0;color:#e6f7ff">🏭 基於生成式AI與網路可靠度於製造系統戰情儀表設計</h1>
 </div>
 """, unsafe_allow_html=True)
 
@@ -333,7 +452,6 @@ with tab_dashboard:
             demand = st.number_input("輸出量 (d)", min_value=1, value=int(def_d), step=100)
             carbon_factor = st.number_input("CO₂ 係數 (kg/kWh)", min_value=0.001, value=float(def_c), step=0.001, format="%.3f")
             
-            st.info("💡 說明：能耗與碳排現已依據機台功率靜態計算，與 Excel 結果一致。")
             st.divider()
             
             # 執行計算
@@ -361,7 +479,38 @@ with tab_dashboard:
         topo_cols = st.columns(FIXED_N)
         for i, col in enumerate(topo_cols):
             with col:
-                st.markdown(f"""<div style="position: relative; width: 100%; text-align: center;"><div class="topo-node {node_states[i]}">{STATION_DATA[i]["id"]}</div>{'<div class="topo-connector"></div>' if i < FIXED_N - 1 else ''}</div>""", unsafe_allow_html=True)
+                # [修改] 拓樸圖繪製邏輯：優化 Input/Output 與箭頭顯示，防止重疊
+                html_content = f"""<div class="topo-container">"""
+                
+                # 1. 第一個節點前加入 Input Group (絕對定位於左側)
+                if i == 0:
+                     html_content += """
+                        <div class="input-group">
+                            <span class="input-label">Input</span>
+                            <div class="input-arrow"></div>
+                        </div>
+                     """
+                
+                # [修改] 2. 其他節點前加入連接箭頭 (絕對定位於左側，指向目前節點)
+                if i > 0:
+                    html_content += '<div class="pre-connector-line"></div>'
+
+                # 3. 節點本體
+                html_content += f"""<div class="topo-node {node_states[i]}">{STATION_DATA[i]["id"]}</div>"""
+                
+                # 4. 最後一個節點後加入 Output Group (絕對定位於右側)
+                if i == FIXED_N - 1:
+                     html_content += """
+                        <div class="output-group">
+                            <div class="output-arrow"></div>
+                            <span class="output-label">Output</span>
+                        </div>
+                     """
+
+                html_content += "</div>" # 關閉容器 div
+
+                st.markdown(html_content, unsafe_allow_html=True)
+                
                 if st.button("檢視", key=f"btn_node_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
                     st.session_state.selected_node_idx = i
                     st.rerun()
@@ -400,34 +549,41 @@ with tab_dashboard:
         with c1:
             fig1 = go.Figure(go.Bar(x=stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
             fig1.update_layout(
-                title="各工作站耗損量",
+                title=dict(text="各工作站耗損量", font=dict(size=22, color='black', weight='bold')),
                 paper_bgcolor='white',
                 plot_bgcolor='white',
                 height=350,
-                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial')),
-                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial'))
+                # 強制設定字體顏色為黑色，並放大字體
+                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
+                yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'))
             )
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
             fig2 = go.Figure(go.Bar(x=stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
             fig2.update_layout(
-                title="各工作站功率 (kW)",
+                title=dict(text="各工作站功率 (kW)", font=dict(size=22, color='black', weight='bold')),
                 paper_bgcolor='white',
                 plot_bgcolor='white',
                 height=350,
-                xaxis=dict(type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial')),
-                yaxis=dict(color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=14, color='#000000', family='Arial'))
+                # 強制設定字體顏色為黑色，並放大字體
+                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
+                yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'))
             )
             st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("### 📉 系統可靠度敏感度分析")
         
-        d_range_vals = np.arange(500, 5501, 500)
+        # 定義臨界點
+        crit_d = 2523
+
+        # 修改：生成 X 軸數據點。除了原本的 500 間隔外，強制加入「臨界點」與「臨界點下一點 (crit_d + 1)」。
+        raw_range = np.arange(500, 5501, 500)
+        d_range_vals = np.sort(np.unique(np.concatenate((raw_range, [crit_d, crit_d + 1]))))
+
         y_vals = []
         for val in d_range_vals:
              y_vals.append(calculate_metrics(val, carbon_factor, STATION_DATA)['reliability'])
 
-        crit_d = 2523
         crit_res = calculate_metrics(crit_d, carbon_factor, STATION_DATA)
         crit_y = crit_res['reliability']
 
@@ -449,29 +605,30 @@ with tab_dashboard:
             name=f'臨界點 (d={crit_d})',
             marker=dict(symbol='star', size=22, color='#ffd86b', line=dict(width=2, color='#ff0000')),
             text=['★ 臨界點'],
-            textposition="top right"
+            textposition="top right",
+            textfont=dict(color="black", size=14) # 強制文字標籤為黑色
         ))
 
         fig3.update_layout(
-            title="系統可靠度敏感度分析",
-            xaxis_title="輸出量 (d)", 
-            yaxis_title="系統可靠度",
+            title=dict(text="系統可靠度敏感度分析", font=dict(size=22, color='black', weight='bold')),
+            xaxis_title=dict(text="輸出量 (d)", font=dict(size=18, color='black')), 
+            yaxis_title=dict(text="系統可靠度", font=dict(size=18, color='black')),
             paper_bgcolor='white',
             plot_bgcolor='white',
             height=400,
             margin=dict(l=20, r=20, t=40, b=20),
-            legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99),
+            legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99, font=dict(color="black", size=14)),
             xaxis=dict(
-                title_font=dict(size=14, color='#000000', family='Arial'),
+                title_font=dict(size=18, color='#000000', family='Arial'),
                 color='#000000',
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
                 gridcolor='#000000', gridwidth=1,
                 zeroline=False,
-                tickfont=dict(size=14, color='#000000', family='Arial')
+                tickfont=dict(size=16, color='#000000', family='Arial')
             ),
             yaxis=dict(
-                title_font=dict(size=14, color='#000000', family='Arial'),
+                title_font=dict(size=18, color='#000000', family='Arial'),
                 color='#000000',
                 linecolor='#000000', linewidth=1,
                 tickcolor='#000000', tickwidth=1,
@@ -480,7 +637,7 @@ with tab_dashboard:
                 tickmode='linear',
                 tick0=0,
                 dtick=0.2,
-                tickfont=dict(size=14, color='#000000', family='Arial')
+                tickfont=dict(size=16, color='#000000', family='Arial')
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
@@ -495,33 +652,6 @@ with tab_dashboard:
             "狀態數量": [len(d['capacities']) for d in STATION_DATA]
         })
         st.dataframe(df_res, use_container_width=True)
-
-        st.divider()
-        st.markdown("""
-        ### 計算公式
-
-        #### <span style="color:#f3a21a">系統總輸入量計算公式</span>
-        $$
-        I = \\frac{d}{p^n}
-        $$
-        <div style="color:#cccccc; font-size:14px; margin-bottom: 20px;">
-        系統總輸入量計算公式，其中 p 是成功率，n 是工作站數量 (固定為 5)。
-        </div>
-
-        #### <span style="color:#f3a21a">工作站 i 的輸入量計算公式</span>
-        $$
-        f_i^{(0)} = I \\cdot p^{i-1}
-        $$
-        <div style="color:#cccccc; font-size:14px; margin-bottom: 30px;">
-        工作站 i 的輸入量計算公式。表示從第一個工作站開始，每個工作站的輸入量隨成功率的指數遞減。
-        </div>
-
-        ### 碳排放分階段公式
-
-        $$
-        E_{k,i}^{load} = P_{k,i}^{load} \\cdot t_{k,i}^{load} \\cdot \\lambda
-        $$
-        """, unsafe_allow_html=True)
 
 # --- TAB 2: Editor ---
 with tab_editor:
