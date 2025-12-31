@@ -449,7 +449,8 @@ with tab_dashboard:
             def_d = auth_data.get("d", 2500)
             def_c = auth_data.get("carbon_factor", 0.474)
 
-            demand = st.number_input("輸出量 (d)", min_value=1, value=int(def_d), step=100)
+            # [修改] 使用 LaTeX 語法 ($d$) 讓側邊欄的 d 變成斜體
+            demand = st.number_input("輸出量 ($d$)", min_value=1, value=int(def_d), step=100)
             carbon_factor = st.number_input("CO₂ 係數 (kg/kWh)", min_value=0.001, value=float(def_c), step=0.001, format="%.3f")
             
             st.divider()
@@ -534,9 +535,12 @@ with tab_dashboard:
                 </div></div>""", unsafe_allow_html=True)
 
         k1, k2, k3, k4, k5 = st.columns([1,1,1,1,1], gap="large")
-        with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 (Rd)</div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
-        with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 d</div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
-        with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">總功率 (kW)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
+        # [修改] 將 "Rd" 中的 d 改為下標 (R<sub>d</sub>)
+        with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">(R<sub>d</sub>)</span></div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
+        # [修改] 將 "d" 改為正式論文格式：Times New Roman + 斜體 (變數)
+        with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">d</span></div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
+        # [修改] 將 "kW" 改為正式論文格式：Times New Roman (單位通常不斜體)
+        with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">總功率 (<span style="font-family: \'Times New Roman\', serif;">kW</span>)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
         c_color = "green" if sys_carbon < 250 else "yellow" if sys_carbon < 300 else "red"
         
         with k4: st.markdown(f'<div class="kpi-box kpi-border-{c_color}"><div class="kpi-label">總碳排放 (kg)</div><div class="kpi-value">{res["carbon_emission"]:.3f}</div></div>', unsafe_allow_html=True)
@@ -602,7 +606,8 @@ with tab_dashboard:
             x=[crit_d], 
             y=[crit_y],
             mode='markers+text',
-            name=f'臨界點 (d={crit_d})',
+            # [修改] 將 Legend 中的 "d" 改為 Times New Roman + 斜體
+            name=f'臨界點 (<span style="font-family: Times New Roman; font-style: italic;">d</span>={crit_d})',
             marker=dict(symbol='star', size=22, color='#ffd86b', line=dict(width=2, color='#ff0000')),
             text=['★ 臨界點'],
             textposition="top right",
@@ -611,7 +616,8 @@ with tab_dashboard:
 
         fig3.update_layout(
             title=dict(text="系統可靠度敏感度分析", font=dict(size=22, color='black', weight='bold')),
-            xaxis_title=dict(text="輸出量 (d)", font=dict(size=18, color='black')), 
+            # [修改] 將 X 軸標題中的 "d" 改為 Times New Roman + 斜體
+            xaxis_title=dict(text="輸出量 (<span style='font-family: Times New Roman; font-style: italic;'>d</span>)", font=dict(size=18, color='black')), 
             yaxis_title=dict(text="系統可靠度", font=dict(size=18, color='black')),
             paper_bgcolor='white',
             plot_bgcolor='white',
