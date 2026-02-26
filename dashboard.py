@@ -14,9 +14,9 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="基於生成式AI與網路可靠度於製造系統戰情儀表設計", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
 
 # 預設 Excel 路徑
-DEFAULT_EXCEL_PATH = "新版簡單.xlsx"
+DEFAULT_EXCEL_PATH = "!!!最新版簡單!!!.xlsx"
 
-# --- 1. 全局 CSS 與 Modal 樣式 (完全保留原版面) ---
+# --- 1. 全局 CSS 與 Modal 樣式 ---
 st.markdown(
     """
     <style>
@@ -59,163 +59,41 @@ st.markdown(
     @keyframes kpiShake { 0% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,107,107,0); } 25% { transform: translateX(-5px) rotate(-1deg); box-shadow: 0 0 15px rgba(255,107,107,0.5); } 50% { transform: translateX(5px) rotate(1deg); box-shadow: 0 0 25px rgba(255,107,107,0.8); } 75% { transform: translateX(-5px) rotate(-1deg); box-shadow: 0 0 15px rgba(255,107,107,0.5); } 100% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,107,107,0); } }
     .kpi-shake { animation: kpiShake 0.5s infinite; border-color: #ff6b6b !important; }
 
-    /* --- [修改] 拓樸圖全新樣式 (解決重疊與美觀問題) --- */
-    
-    /* 1. 容器設定：確保內容可視，不會被裁切 */
+    /* 拓樸圖樣式 */
     .topo-container {
-        position: relative;
-        width: 100%;
-        height: 100px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        overflow: visible !important; /* 關鍵：讓 Input/Output 可以凸出去 */
+        position: relative; width: 100%; height: 100px; display: flex; align-items: center; justify-content: center; overflow: visible !important;
     }
-
-    /* 2. 節點圓圈 (半徑約 30px) */
     .topo-node { 
-        width: 60px; height: 60px; 
-        border-radius: 50%; 
-        display: flex; align-items: center; justify-content: center; 
-        font-weight: bold; font-size: 1.2rem; color: #fff; 
-        border: 3px solid rgba(255,255,255,0.3); 
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3); 
-        transition: all 0.3s ease; 
-        position: relative; 
-        z-index: 2; /* 確保圓圈蓋在線條上 */
-        background: #23395B; /* 預設背景 */
+        width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; 
+        font-weight: bold; font-size: 1.2rem; color: #fff; border: 3px solid rgba(255,255,255,0.3); 
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: all 0.3s ease; position: relative; z-index: 2; background: #23395B; 
     }
-    
-    /* 狀態顏色 */
     .node-green { background: linear-gradient(135deg, #4cd37a, #218838); box-shadow: 0 0 15px rgba(76, 211, 122, 0.4); }
     .node-yellow { background: linear-gradient(135deg, #ffd86b, #e0a800); box-shadow: 0 0 15px rgba(255, 216, 107, 0.4); }
     .node-red { background: linear-gradient(135deg, #ff6b6b, #c82333); box-shadow: 0 0 15px rgba(255, 107, 107, 0.6); }
     .node-fail { background: #8B0000 !important; animation: failBlink 0.8s infinite, kpiShake 0.4s infinite !important; box-shadow: 0 0 30px rgba(255, 0, 0, 0.8) !important; z-index: 10; }
     .node-fail::after { content: "FAIL"; position: absolute; top: -25px; color: #ff6b6b; font-weight: 900; font-size: 14px; text-shadow: 0 2px 4px #000; left: 50%; transform: translateX(-50%); }
 
-    /* [修改] 3. 節點左側的連接線 (從左側節點中心到目前節點中心) */
-    .pre-connector-line {
-        position: absolute;
-        top: 50%;
-        right: 50%; /* 從目前節點中心向左延伸 */
-        width: 100%; /* 延伸到上一個節點中心 (Streamlit Columns 等寬) */
-        height: 2px;
-        background: #cccccc; /* 實心灰色 */
-        transform: translateY(-50%);
-        z-index: 1;
-    }
-    /* 連接線中間的箭頭 (實心，靠近節點左側) */
-    .pre-connector-line::after {
-        content: '';
-        position: absolute;
-        top: -4px;
-        width: 0;
-        height: 0;
-        border-top: 5px solid transparent;
-        border-bottom: 5px solid transparent;
-        border-left: 8px solid #cccccc; /* 實心灰色箭頭 */
-        /* [關鍵修改] 35px 確保箭頭在圓圈(半徑30px)的外部左側，不會被蓋住 */
-        right: 35px; 
-    }
-
-    /* 4. Input 區塊 (絕對定位於節點左側，實心) */
-    .input-group {
-        position: absolute;
-        right: 50%; /* 從中心點開始算 */
-        margin-right: 35px; /* 向左推：半徑(30) + 間距(5) */
-        top: 50%;
-        transform: translateY(-50%);
-        display: flex;
-        align-items: center;
-        white-space: nowrap; /* 強制不換行 */
-        z-index: 5;
-    }
-    .input-label {
-        color: #fff;
-        font-weight: 700;
-        font-size: 16px;
-        margin-right: 8px;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    }
-    .input-arrow {
-        width: 40px;
-        height: 2px;
-        background: #cccccc; /* [修改] 實心灰色 */
-        position: relative;
-    }
-    .input-arrow::after {
-        content: '';
-        position: absolute;
-        right: 0;
-        top: -4px;
-        border-top: 5px solid transparent;
-        border-bottom: 5px solid transparent;
-        border-left: 8px solid #cccccc; /* [修改] 實心灰色箭頭 */
-    }
-
-    /* 5. Output 區塊 (絕對定位於節點右側，實心) */
-    .output-group {
-        position: absolute;
-        left: 50%; /* 從中心點開始算 */
-        margin-left: 35px; /* 向右推：半徑(30) + 間距(5) */
-        top: 50%;
-        transform: translateY(-50%);
-        display: flex;
-        align-items: center;
-        white-space: nowrap; /* 強制不換行 */
-        z-index: 5;
-    }
-    .output-label {
-        color: #fff;
-        font-weight: 700;
-        font-size: 16px;
-        margin-left: 8px;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    }
-    .output-arrow {
-        width: 40px;
-        height: 2px;
-        background: #cccccc; /* [修改] 實心灰色 */
-        position: relative;
-    }
-    .output-arrow::after {
-        content: '';
-        position: absolute;
-        right: 0;
-        top: -4px;
-        border-top: 5px solid transparent;
-        border-bottom: 5px solid transparent;
-        border-left: 8px solid #cccccc; /* [修改] 實心灰色箭頭 */
-    }
+    .pre-connector-line { position: absolute; top: 50%; right: 50%; width: 100%; height: 2px; background: #cccccc; transform: translateY(-50%); z-index: 1; }
+    .pre-connector-line::after { content: ''; position: absolute; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #cccccc; right: 35px; }
+    .input-group { position: absolute; right: 50%; margin-right: 35px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; white-space: nowrap; z-index: 5; }
+    .input-label { color: #fff; font-weight: 700; font-size: 16px; margin-right: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+    .input-arrow { width: 40px; height: 2px; background: #cccccc; position: relative; }
+    .input-arrow::after { content: ''; position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #cccccc; }
+    
+    .output-group { position: absolute; left: 50%; margin-left: 35px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; white-space: nowrap; z-index: 5; }
+    .output-label { color: #fff; font-weight: 700; font-size: 16px; margin-left: 8px; text-shadow: 0 2px 4px rgba(0,0,0,0.8); }
+    .output-arrow { width: 40px; height: 2px; background: #cccccc; position: relative; }
+    .output-arrow::after { content: ''; position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #cccccc; }
 
     .detail-card-highlight { border: 2px solid #3fe6ff; background: rgba(63, 230, 255, 0.1); padding: 15px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; }
     [data-testid="stPlotlyChart"] { background-color: #ffffff !important; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.20); padding: 10px; margin-bottom: 20px; }
       
     /* 成功儲存 Modal 樣式 */
-    .success-modal-overlay {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex; justify-content: center; align-items: center;
-        backdrop-filter: blur(4px);
-        animation: fadeOutContainer 2.5s forwards; 
-        z-index: 999999;
-    }
-    .success-modal-content {
-        background: rgba(20, 24, 30, 0.95); 
-        border: 2px solid #4cd37a; border-radius: 16px;
-        padding: 40px 60px; text-align: center;
-        box-shadow: 0 0 40px rgba(76, 211, 122, 0.4);
-    }
-    @keyframes fadeOutContainer {
-        0% { opacity: 1; pointer-events: auto; }
-        70% { opacity: 1; pointer-events: auto; }
-        100% { opacity: 0; pointer-events: none; z-index: -1; }
-    }
-    
-    /* Tabs 未選取狀態文字顏色修正 */
-    button[data-baseweb="tab"][aria-selected="false"] {
-        color: #FFFFFF !important;
-    }
+    .success-modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); animation: fadeOutContainer 2.5s forwards; z-index: 999999; }
+    .success-modal-content { background: rgba(20, 24, 30, 0.95); border: 2px solid #4cd37a; border-radius: 16px; padding: 40px 60px; text-align: center; box-shadow: 0 0 40px rgba(76, 211, 122, 0.4); }
+    @keyframes fadeOutContainer { 0% { opacity: 1; pointer-events: auto; } 70% { opacity: 1; pointer-events: auto; } 100% { opacity: 0; pointer-events: none; z-index: -1; } }
+    button[data-baseweb="tab"][aria-selected="false"] { color: #FFFFFF !important; }
     </style>
     """,
     unsafe_allow_html=True
@@ -253,35 +131,36 @@ def parse_list_from_string(s):
 
 def get_default_data():
     return pd.DataFrame([
-        {"Station": 1, "p": 0.96, "power": 28.9, "capacities": "[0, 600, 1200, 1800, 2400, 3000]", "probs": "[0.001, 0.003, 0.005, 0.007, 0.012, 0.972]"},
-        {"Station": 2, "p": 0.96, "power": 46.6, "capacities": "[0, 725, 1450, 2175, 2900]", "probs": "[0.001, 0.001, 0.004, 0.005, 0.989]"},
-        {"Station": 3, "p": 0.97, "power": 137.0, "capacities": "[0, 570, 1140, 1710, 2280, 2850]", "probs": "[0.001, 0.003, 0.003, 0.005, 0.007, 0.981]"},
-        {"Station": 4, "p": 0.97, "power": 17.7, "capacities": "[0, 725, 1450, 2175, 2900]", "probs": "[0.003, 0.005, 0.007, 0.01, 0.975]"},
-        {"Station": 5, "p": 0.97, "power": 38.8, "capacities": "[0, 925, 1850, 2775]", "probs": "[0.001, 0.003, 0.003, 0.995]"}
+        {"Station": 1, "p": 0.96, "power": 9.0, "k": 0.15, "capacities": "[0, 4800, 9600, 14400, 19200, 24000]", "probs": "[0.001, 0.003, 0.005, 0.007, 0.012, 0.972]"},
+        {"Station": 2, "p": 0.95, "power": 12.0, "k": 0.3, "capacities": "[0, 5750, 11500, 17250, 23000]", "probs": "[0.001, 0.001, 0.004, 0.005, 0.989]"},
+        {"Station": 3, "p": 0.94, "power": 7.0, "k": 0.4, "capacities": "[0, 4400, 8800, 13200, 17600, 22000]", "probs": "[0.001, 0.003, 0.003, 0.005, 0.007, 0.981]"},
+        {"Station": 4, "p": 0.93, "power": 6.0, "k": 0.5, "capacities": "[0, 5250, 10500, 15750, 21000]", "probs": "[0.003, 0.005, 0.007, 0.01, 0.975]"},
+        {"Station": 5, "p": 0.97, "power": 4.0, "k": 0.05, "capacities": "[0, 8500, 17000, 25500]", "probs": "[0.001, 0.001, 0.003, 0.995]"}
     ])
 
 def load_data_from_excel_authority(file_source=None):
     if file_source is None:
         path = DEFAULT_EXCEL_PATH
         if not os.path.exists(path):
-            return get_default_data(), {"d": 2500, "carbon_factor": 0.474} 
+            return get_default_data(), {"d": 10000, "carbon_factor": 0.474, "tb": 0.8} 
         file_source = path
 
     try:
         df_raw = pd.read_excel(file_source, header=None)
-        d_val, co2_val = 2500, 0.474
+        d_val, co2_val, tb_val = 10000, 0.474, 0.8
         try:
             for r_idx, row in df_raw.iterrows():
                 for c_idx, val in enumerate(row):
-                    if val == "d=":
-                        d_val = float(df_raw.iloc[r_idx, c_idx + 1])
-                    if val == "CO2=":
-                        co2_val = float(df_raw.iloc[r_idx, c_idx + 1])
+                    if val == "d=": d_val = float(df_raw.iloc[r_idx, c_idx + 1])
+                    if val == "CO2=": co2_val = float(df_raw.iloc[r_idx, c_idx + 1])
+                    if val == "Tb=": tb_val = float(df_raw.iloc[r_idx, c_idx + 1])
         except Exception:
             pass
 
-        excel_scalars = {"d": d_val, "carbon_factor": co2_val}
+        excel_scalars = {"d": d_val, "carbon_factor": co2_val, "tb": tb_val}
         df_data = pd.read_excel(file_source)
+        
+        df_data.rename(columns={"Success rate": "Success_Rate", "capacity": "Capacity"}, inplace=True)
         
         req_cols = ["Station", "Power(kW)加工功率", "Capacity", "Capacity_Prob", "Success_Rate"]
         if not all(col in df_data.columns for col in req_cols):
@@ -297,6 +176,7 @@ def load_data_from_excel_authority(file_source=None):
                 "Station": int(name),
                 "p": float(first_row["Success_Rate"]),
                 "power": float(first_row["Power(kW)加工功率"]),
+                "k": float(first_row.get("k", 0.15)),
                 "capacities": str(caps),
                 "probs": str(probs)
             })
@@ -306,26 +186,31 @@ def load_data_from_excel_authority(file_source=None):
 
     except Exception as e:
         st.error(f"Excel 讀取錯誤: {e}。已載入預設資料。")
-        return get_default_data(), {"d": 2500, "carbon_factor": 0.474}
+        return get_default_data(), {"d": 10000, "carbon_factor": 0.474, "tb": 0.8}
 
-# 初始化 Session
 if "df_data" not in st.session_state:
     df_loaded, excel_auth_data = load_data_from_excel_authority()
     st.session_state.df_data = df_loaded
     st.session_state.excel_authority = excel_auth_data 
 
-# [新增] 用來控制分頁鎖定的變數： None=不強制, 0=強制Dashboard, 1=強制Editor
 if "force_tab_index" not in st.session_state:
     st.session_state.force_tab_index = None
 
-# 防呆檢查
 if st.session_state.excel_authority is None:
-    st.session_state.excel_authority = {"d": 2500, "carbon_factor": 0.474}
+    st.session_state.excel_authority = {"d": 10000, "carbon_factor": 0.474, "tb": 0.8}
 
-def calculate_metrics(demand, carbon_factor, _station_data):
+def calculate_metrics(demand, carbon_factor, _station_data, tb_value):
     n = len(_station_data)
+    
     p_list = [d.get('p', 0.96) for d in _station_data]
+    k_list = [d.get('k', 0.15) for d in _station_data]
     power_list = [d.get('power', 0.0) for d in _station_data]
+    
+    mu = 1.0
+    pi_list = []
+    for p, k in zip(p_list, k_list):
+        pi = p * math.exp(-k * (tb_value - mu)**2)
+        pi_list.append(pi)
     
     product_p = 1.0
     for p_val in p_list: product_p *= p_val
@@ -338,15 +223,13 @@ def calculate_metrics(demand, carbon_factor, _station_data):
         current_input *= p_list[i]
     rounded_inputs = [math.ceil(x) for x in inputs]
 
-    # 能耗與碳排 (靜態)
     energies = power_list 
     calc_total_energy = sum(energies)
     calc_carbon = calc_total_energy * carbon_factor
 
-    # 耗損 (Loss) 計算: Input * (1 - p)
     losses = []
     for i in range(n):
-        losses.append(inputs[i] * (1 - p_list[i]))
+        losses.append(inputs[i] * (1 - pi_list[i]))
     total_loss = sum(losses)
 
     total_probability = 0
@@ -371,6 +254,7 @@ def calculate_metrics(demand, carbon_factor, _station_data):
             total_probability += current_prob
 
     return {
+        "pi_list": pi_list,
         "inputs": inputs,
         "rounded_inputs": rounded_inputs,
         "energies": energies,
@@ -388,17 +272,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# [還原] 使用原本的 Tabs 結構
 tab_dashboard, tab_editor = st.tabs(["📊 戰情儀表板 (Dashboard)", "📝 資料管理 (Excel 編輯)"])
 
-# [核心功能]：分頁控制器 (JS Injection)
-# 如果 force_tab_index 不是 None，則注入 JS 強制點擊該分頁，然後重置變數
 if st.session_state.force_tab_index is not None:
     target_index = st.session_state.force_tab_index
     components.html(
         f"""
         <script>
-            // 等待一點時間確保 DOM 載入
             setTimeout(function() {{
                 var tabs = window.parent.document.querySelectorAll('button[data-baseweb="tab"]');
                 if (tabs.length > {target_index}) {{
@@ -409,7 +289,6 @@ if st.session_state.force_tab_index is not None:
         """,
         height=0, width=0
     )
-    # 執行一次後，將強制狀態解除，讓使用者可以自由切換，直到下一次特定事件發生
     st.session_state.force_tab_index = None
 
 # --- TAB 1: Dashboard ---
@@ -428,7 +307,8 @@ with tab_dashboard:
                 "capacities": caps,
                 "probs": probs,
                 "p": float(row['p']),
-                "power": float(row['power'])
+                "power": float(row['power']),
+                "k": float(row.get('k', 0.15))
             })
         FIXED_N = len(STATION_DATA)
     except Exception as e:
@@ -442,26 +322,23 @@ with tab_dashboard:
         with st.sidebar:
             st.markdown("""<div style='padding:12px 10px; background-color: rgba(255, 255, 255, 0.08); border-radius: 8px; margin-bottom: 15px;'><h3 style='margin:0; color:#ffffff'>系統參數面板</h3></div>""", unsafe_allow_html=True)
             
-            # 安全讀取參數
-            auth_data = st.session_state.get("excel_authority")
-            if auth_data is None: auth_data = {"d": 2500, "carbon_factor": 0.474}
+            auth_data = st.session_state.get("excel_authority", {"d": 10000, "carbon_factor": 0.474, "tb": 0.8})
             
-            def_d = auth_data.get("d", 2500)
+            def_d = auth_data.get("d", 10000)
             def_c = auth_data.get("carbon_factor", 0.474)
+            def_tb = auth_data.get("tb", 0.8)
 
-            # [修改] 使用 LaTeX 語法 ($d$) 讓側邊欄的 d 變成斜體
             demand = st.number_input("輸出量 ($d$)", min_value=1, value=int(def_d), step=100)
             carbon_factor = st.number_input("CO₂ 係數 (kg/kWh)", min_value=0.001, value=float(def_c), step=0.001, format="%.3f")
+            tb_val = st.slider("厚度參數 ($Tb$)", min_value=0.8, max_value=1.2, value=float(def_tb), step=0.01)
             
             st.divider()
             
-            # 執行計算
-            res = calculate_metrics(demand, carbon_factor, STATION_DATA)
+            res = calculate_metrics(demand, carbon_factor, STATION_DATA, tb_val)
             
             if res['reliability'] < 0.8: st.error(f"可靠度過低：{res['reliability']:.4f}")
             else: st.success(f"可靠度正常：{res['reliability']:.4f}")
 
-        # KPI & Logic
         sys_reliability = res['reliability']
         sys_carbon = res['carbon_emission']
         sys_status = "green" if sys_reliability >= 0.9 else "yellow" if sys_reliability >= 0.8 else "red"
@@ -480,10 +357,7 @@ with tab_dashboard:
         topo_cols = st.columns(FIXED_N)
         for i, col in enumerate(topo_cols):
             with col:
-                # [修改] 拓樸圖繪製邏輯：優化 Input/Output 與箭頭顯示，防止重疊
                 html_content = f"""<div class="topo-container">"""
-                
-                # 1. 第一個節點前加入 Input Group (絕對定位於左側)
                 if i == 0:
                      html_content += """
                         <div class="input-group">
@@ -492,14 +366,11 @@ with tab_dashboard:
                         </div>
                      """
                 
-                # [修改] 2. 其他節點前加入連接箭頭 (絕對定位於左側，指向目前節點)
                 if i > 0:
                     html_content += '<div class="pre-connector-line"></div>'
 
-                # 3. 節點本體
                 html_content += f"""<div class="topo-node {node_states[i]}">{STATION_DATA[i]["id"]}</div>"""
                 
-                # 4. 最後一個節點後加入 Output Group (絕對定位於右側)
                 if i == FIXED_N - 1:
                      html_content += """
                         <div class="output-group">
@@ -508,8 +379,7 @@ with tab_dashboard:
                         </div>
                      """
 
-                html_content += "</div>" # 關閉容器 div
-
+                html_content += "</div>" 
                 st.markdown(html_content, unsafe_allow_html=True)
                 
                 if st.button("檢視", key=f"btn_node_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
@@ -525,21 +395,20 @@ with tab_dashboard:
                 
                 st.markdown(f"""
                 <div class="detail-card-highlight">
-                <h5 style="margin-bottom: 15px; color: #fff;">🔍 {d_st["name"]} 詳細數據</h5>
+                <h5 style="margin-bottom: 15px; color: #fff;">🔍 工作站 {d_st["name"]} 詳細數據</h5>
                 <div style="display: flex; justify-content: space-between; text-align: center; gap: 10px;">
-                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">輸入量</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{res["rounded_inputs"][idx]}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">計畫輸入量</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{res["rounded_inputs"][idx]}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">功率 (kW)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st['power']}</div></div>
-                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">成功率 p</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('p', 0.96)}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">參數 k</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('k', 0.15)}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">原始率 p</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('p', 0.96)}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">實際運作率 pi</div><div style="font-size: 1.5rem; font-weight: 700; color: #4cd37a;">{res['pi_list'][idx]:.4f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">碳排放 (kg)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{st_carbon:.3f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">耗損 (qty)</div><div style="font-size: 1.5rem; font-weight: 700; color: #ff6b6b;">{st_loss:.3f}</div></div>
                 </div></div>""", unsafe_allow_html=True)
 
         k1, k2, k3, k4, k5 = st.columns([1,1,1,1,1], gap="large")
-        # [修改] 將 "Rd" 中的 d 改為下標 (R<sub>d</sub>)
         with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">(R<sub>d</sub>)</span></div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
-        # [修改] 將 "d" 改為正式論文格式：Times New Roman + 斜體 (變數)
         with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">d</span></div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
-        # [修改] 將 "kW" 改為正式論文格式：Times New Roman (單位通常不斜體)
         with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">總功率 (<span style="font-family: \'Times New Roman\', serif;">kW</span>)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
         c_color = "green" if sys_carbon < 250 else "yellow" if sys_carbon < 300 else "red"
         
@@ -554,10 +423,7 @@ with tab_dashboard:
             fig1 = go.Figure(go.Bar(x=stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
             fig1.update_layout(
                 title=dict(text="各工作站耗損量", font=dict(size=22, color='black', weight='bold')),
-                paper_bgcolor='white',
-                plot_bgcolor='white',
-                height=350,
-                # 強制設定字體顏色為黑色，並放大字體
+                paper_bgcolor='white', plot_bgcolor='white', height=350,
                 xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
                 yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'))
             )
@@ -566,10 +432,7 @@ with tab_dashboard:
             fig2 = go.Figure(go.Bar(x=stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
             fig2.update_layout(
                 title=dict(text="各工作站功率 (kW)", font=dict(size=22, color='black', weight='bold')),
-                paper_bgcolor='white',
-                plot_bgcolor='white',
-                height=350,
-                # 強制設定字體顏色為黑色，並放大字體
+                paper_bgcolor='white', plot_bgcolor='white', height=350,
                 xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
                 yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'))
             )
@@ -577,73 +440,87 @@ with tab_dashboard:
 
         st.markdown("### 📉 系統可靠度敏感度分析")
         
-        # 定義臨界點
-        crit_d = 2523
+        def get_dynamic_crit_d(_station_data):
+            p_list = [st_data.get('p', 0.96) for st_data in _station_data]
+            max_d_limits = []
+            for i in range(len(_station_data)):
+                product_p_i_to_n = 1.0
+                for j in range(i, len(_station_data)):
+                    product_p_i_to_n *= p_list[j]
+                max_cap = max(_station_data[i]["capacities"]) if _station_data[i]["capacities"] else 0
+                max_d_limits.append(max_cap * product_p_i_to_n)
+            return int(math.floor(min(max_d_limits))) if max_d_limits else 1000
 
-        # 修改：生成 X 軸數據點。除了原本的 500 間隔外，強制加入「臨界點」與「臨界點下一點 (crit_d + 1)」。
-        raw_range = np.arange(500, 5501, 500)
+        crit_d = get_dynamic_crit_d(STATION_DATA)
+        
+        # 動態計算適當的步長
+        step = max(500, (crit_d // 10 // 500) * 500)
+        if step == 0: step = 500
+
+        # 將無聊的前段區域縮短，聚焦於發生變化的地方
+        start_d = int(min(demand * 0.8, max(500, crit_d - 8000)))
+        start_d = max(500, (start_d // 500) * 500)
+
+        raw_range = np.arange(start_d, crit_d + step + 500, step)
         d_range_vals = np.sort(np.unique(np.concatenate((raw_range, [crit_d, crit_d + 1]))))
+        d_range_vals = [int(v) for v in d_range_vals if v <= crit_d + max(step, 1000)]
 
         y_vals = []
         for val in d_range_vals:
-             y_vals.append(calculate_metrics(val, carbon_factor, STATION_DATA)['reliability'])
+             y_vals.append(calculate_metrics(val, carbon_factor, STATION_DATA, tb_val)['reliability'])
 
-        crit_res = calculate_metrics(crit_d, carbon_factor, STATION_DATA)
+        crit_res = calculate_metrics(crit_d, carbon_factor, STATION_DATA, tb_val)
         crit_y = crit_res['reliability']
+        
+        demand_res = calculate_metrics(demand, carbon_factor, STATION_DATA, tb_val)
+        demand_y = demand_res['reliability']
 
         fig3 = go.Figure()
         
+        fig3.add_trace(go.Scatter(x=d_range_vals, y=y_vals, mode='lines+markers', name='可靠度曲線', line=dict(color='#3fe6ff', width=3), marker=dict(size=8, color='#3fe6ff')))
+        
+        # 標記臨界點 (文字移往左上方 top left 防止右側被裁切)
         fig3.add_trace(go.Scatter(
-            x=d_range_vals, 
-            y=y_vals,
-            mode='lines+markers',
-            name='可靠度曲線',
-            line=dict(color='#3fe6ff', width=3),
-            marker=dict(size=8, color='#3fe6ff')
-        ))
-
-        fig3.add_trace(go.Scatter(
-            x=[crit_d], 
-            y=[crit_y],
-            mode='markers+text',
-            # [修改] 將 Legend 中的 "d" 改為 Times New Roman + 斜體
+            x=[crit_d], y=[crit_y], mode='markers+text',
             name=f'臨界點 (<span style="font-family: Times New Roman; font-style: italic;">d</span>={crit_d})',
             marker=dict(symbol='star', size=22, color='#ffd86b', line=dict(width=2, color='#ff0000')),
-            text=['★ 臨界點'],
-            textposition="top right",
-            textfont=dict(color="black", size=14) # 強制文字標籤為黑色
+            text=['★ 臨界點'], textposition="top left", textfont=dict(color="black", size=14)
         ))
-
+        
+        # 標記當前位置 (文字固定在右上角 top right)
+        fig3.add_trace(go.Scatter(
+            x=[demand], y=[demand_y], mode='markers+text',
+            name=f'當前輸出量 ({demand})',
+            marker=dict(symbol='circle', size=14, color='#4cd37a', line=dict(width=2, color='#ffffff')),
+            text=['📍 當前位置'], textposition="top right", textfont=dict(color="black", size=14)
+        ))
+        
+        # 計算邊界留白 (Padding) 讓圖表不會貼著邊緣
+        all_x_points = d_range_vals + [demand, crit_d]
+        max_x_val = max(all_x_points)
+        min_x_val = min(all_x_points)
+        x_margin = max(step, (max_x_val - min_x_val) * 0.15) # 增加 15% 的 X 軸留白
+        
         fig3.update_layout(
             title=dict(text="系統可靠度敏感度分析", font=dict(size=22, color='black', weight='bold')),
-            # [修改] 將 X 軸標題中的 "d" 改為 Times New Roman + 斜體
             xaxis_title=dict(text="輸出量 (<span style='font-family: Times New Roman; font-style: italic;'>d</span>)", font=dict(size=18, color='black')), 
             yaxis_title=dict(text="系統可靠度", font=dict(size=18, color='black')),
-            paper_bgcolor='white',
-            plot_bgcolor='white',
-            height=400,
-            margin=dict(l=20, r=20, t=40, b=20),
+            paper_bgcolor='white', plot_bgcolor='white', height=400, margin=dict(l=20, r=20, t=40, b=20),
             legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99, font=dict(color="black", size=14)),
             xaxis=dict(
-                title_font=dict(size=18, color='#000000', family='Arial'),
-                color='#000000',
-                linecolor='#000000', linewidth=1,
-                tickcolor='#000000', tickwidth=1,
-                gridcolor='#000000', gridwidth=1,
-                zeroline=False,
-                tickfont=dict(size=16, color='#000000', family='Arial')
+                title_font=dict(size=18, color='#000000', family='Arial'), 
+                color='#000000', linecolor='#000000', linewidth=1, 
+                tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
+                zeroline=False, tickfont=dict(size=16, color='#000000', family='Arial'),
+                range=[min_x_val - x_margin, max_x_val + x_margin] # 加上動態左右留白
             ),
             yaxis=dict(
-                title_font=dict(size=18, color='#000000', family='Arial'),
-                color='#000000',
-                linecolor='#000000', linewidth=1,
-                tickcolor='#000000', tickwidth=1,
-                gridcolor='#000000', gridwidth=1,
-                zeroline=False,
-                tickmode='linear',
-                tick0=0,
-                dtick=0.2,
-                tickfont=dict(size=16, color='#000000', family='Arial')
+                title_font=dict(size=18, color='#000000', family='Arial'), 
+                color='#000000', linecolor='#000000', linewidth=1, 
+                tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
+                zeroline=False, tickmode='linear', tick0=0, dtick=0.2, 
+                tickfont=dict(size=16, color='#000000', family='Arial'),
+                range=[-0.15, 1.25] # 固定 Y 軸上下限，留出頂部與底部空間放置 Label
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
@@ -651,10 +528,13 @@ with tab_dashboard:
         st.header("📋 工作站狀態表")
         df_res = pd.DataFrame({
             "工作站": stations, 
-            "輸入量": res["inputs"], 
+            "參數 k": [d.get("k", 0.15) for d in STATION_DATA],
+            "原始率 p": [d.get("p", 0.96) for d in STATION_DATA],
+            "運作率 pi": [f"{pi:.4f}" for pi in res["pi_list"]],
+            "計畫輸入量": res["inputs"], 
             "取整輸入量": res["rounded_inputs"],
             "功率 (kW)": res["energies"], 
-            "耗損 (qty)": res["losses"],
+            "實際耗損 (qty)": res["losses"],
             "狀態數量": [len(d['capacities']) for d in STATION_DATA]
         })
         st.dataframe(df_res, use_container_width=True)
@@ -664,7 +544,7 @@ with tab_editor:
     st.subheader("Excel 資料編輯器 (支援動態長度)")
     col_upload, col_settings = st.columns([2, 1])
     with col_upload:
-        uploaded_file = st.file_uploader("📂 上傳 Excel", type=["xlsx"])
+        uploaded_file = st.file_uploader("📂 上傳 Excel", type=["xlsx", "csv"])
 
     if uploaded_file:
         file_id = f"{uploaded_file.name}_{uploaded_file.size}"
@@ -676,11 +556,7 @@ with tab_editor:
                 st.session_state.processed_file_id = file_id
                 st.session_state.last_uploaded_name = uploaded_file.name
                 
-                # [新增] 清除編輯器的快取狀態，強制顯示新上傳的 Excel 內容
-                if "editor_table" in st.session_state:
-                    del st.session_state["editor_table"]
-
-                # 上傳後也強制保持在編輯頁面
+                if "editor_table" in st.session_state: del st.session_state["editor_table"]
                 st.session_state.force_tab_index = 1
                 st.rerun()
             except Exception as e:
@@ -688,20 +564,21 @@ with tab_editor:
 
     df_source = st.session_state.df_data.copy()
     
-    # [Callback] 當數據編輯器發生變更時，強制鎖定分頁 Index 為 1 (Editor)
     def maintain_editor_tab():
         st.session_state.force_tab_index = 1
 
     edited_df = st.data_editor(
-        df_source[['Station', 'p', 'power', 'capacities', 'probs']],
+        df_source[['Station', 'p', 'power', 'k', 'capacities', 'probs']],
         num_rows="dynamic",
         use_container_width=True,
         key="editor_table", 
-        on_change=maintain_editor_tab,  # 綁定 Callback
+        on_change=maintain_editor_tab,
+        disabled=["k"], 
         column_config={
             "Station": st.column_config.NumberColumn("站號", min_value=1, step=1, required=True),
-            "p": st.column_config.NumberColumn("成功率 p", min_value=0.0001, max_value=1.0),
+            "p": st.column_config.NumberColumn("原始率 p", min_value=0.0001, max_value=1.0),
             "power": st.column_config.NumberColumn("功率 (kW)"),
+            "k": st.column_config.NumberColumn("參數 k", format="%.2f"),
             "capacities": st.column_config.TextColumn("產能列表 (List)", help="例如 [0, 100, 200]"),
             "probs": st.column_config.TextColumn("機率列表 (List)", help="例如 [0.1, 0.4, 0.5]")
         }
@@ -711,69 +588,74 @@ with tab_editor:
     with col_reset:
         if st.button("🔄 重置為預設資料", use_container_width=True):
             st.session_state.df_data = get_default_data()
-            st.session_state.force_tab_index = 1  # 重置後還是留在編輯頁
+            st.session_state.force_tab_index = 1 
             st.rerun()
 
     with col_save:
         if st.button("💾 儲存並更新", use_container_width=True):
             try:
-                # 1. 驗證
                 validated_rows = []
                 for _, row in edited_df.iterrows():
                     caps = parse_list_from_string(row['capacities'])
                     probs = parse_list_from_string(row['probs'])
                     
-                    if not isinstance(caps, list) or not isinstance(probs, list):
-                        st.error(f"站號 {row['Station']}: 列表格式錯誤"); st.stop()
-                    if len(caps) != len(probs):
-                        st.error(f"站號 {row['Station']}: 產能({len(caps)})與機率({len(probs)})長度不符"); st.stop()
-                    if len(caps) > 1 and not all(x < y for x, y in zip(caps, caps[1:])):
-                        st.error(f"站號 {row['Station']}: 產能列表必須嚴格遞增"); st.stop()
-                    if probs and not math.isclose(sum(probs), 1.0, abs_tol=1e-2):
-                        st.warning(f"注意: 站號 {row['Station']} 機率和不為 1 ({sum(probs):.3f})")
+                    if not isinstance(caps, list) or not isinstance(probs, list): st.error(f"站號 {row['Station']}: 列表格式錯誤"); st.stop()
+                    if len(caps) != len(probs): st.error(f"站號 {row['Station']}: 產能({len(caps)})與機率({len(probs)})長度不符"); st.stop()
+                    if len(caps) > 1 and not all(x < y for x, y in zip(caps, caps[1:])): st.error(f"站號 {row['Station']}: 產能列表必須嚴格遞增"); st.stop()
+                    if probs and not math.isclose(sum(probs), 1.0, abs_tol=1e-2): st.warning(f"注意: 站號 {row['Station']} 機率和不為 1 ({sum(probs):.3f})")
                     
                     validated_rows.append((row, caps, probs))
 
-                # 2. 寫入
                 long_rows = []
+                curr_tb = st.session_state.get("tb_val", 1.0)
+                
                 for row, caps, probs in validated_rows:
                     for i in range(len(caps)):
+                        pi_calc = row['p'] * math.exp(-row.get('k', 0.15) * (curr_tb - 1.0)**2)
+                        
                         long_rows.append({
                             "Station": int(row['Station']),
                             "Machine": 1,
-                            "Success_Rate": row['p'],
+                            "Success rate": row['p'],
                             "Power(kW)加工功率": row['power'],
-                            "Capacity": caps[i],
-                            "Capacity_Prob": probs[i]
+                            "capacity": caps[i],
+                            "Capacity_Prob": probs[i],
+                            "k": row.get('k', 0.15),
+                            "pi(deg)": pi_calc
                         })
                 
                 df_long = pd.DataFrame(long_rows)
                 
-                for i in range(6, 14): df_long[f"Unnamed: {i}"] = np.nan
+                for i in range(7, 14): 
+                    if f"Unnamed: {i}" not in df_long.columns:
+                        df_long[f"Unnamed: {i}"] = np.nan
+                
+                cols = ['Station', 'Machine', 'Success rate', 'Power(kW)加工功率', 'capacity', 'Capacity_Prob', 'k', 'Unnamed: 7', 'Unnamed: 8', 'Unnamed: 9', 'Unnamed: 10', 'Unnamed: 11', 'Unnamed: 12', 'Unnamed: 13', 'pi(deg)']
+                df_long = df_long.reindex(columns=cols)
+
                 while len(df_long) < 5:
                     df_long = pd.concat([df_long, pd.DataFrame([np.nan]*df_long.shape[1], columns=df_long.columns)], ignore_index=True)
                 
-                auth_data = st.session_state.get("excel_authority")
-                if auth_data is None: auth_data = {"d": 2500, "carbon_factor": 0.474}
+                auth_data = st.session_state.get("excel_authority", {"d": 10000, "carbon_factor": 0.474, "tb": 0.8})
                 
-                curr_d = auth_data.get("d", 2500)
+                curr_d = auth_data.get("d", 10000)
                 curr_c = auth_data.get("carbon_factor", 0.474)
                 
                 df_long.iloc[1, 7] = "d="
                 df_long.iloc[1, 8] = curr_d
                 df_long.iloc[2, 7] = "CO2="
                 df_long.iloc[2, 8] = curr_c
+                df_long.iloc[3, 7] = "Tb="
+                df_long.iloc[3, 8] = curr_tb
                 
-                save_name = st.session_state.get("last_uploaded_name", "新版簡單_modified.xlsx")
+                save_name = st.session_state.get("last_uploaded_name", "!!!最新版簡單!!!_modified.xlsx")
                 save_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), save_name)
                 df_long.to_excel(save_path, index=False)
                 
-                # 3. 更新與跳轉
                 st.session_state.df_data = edited_df
-                st.session_state.excel_authority = {"d": curr_d, "carbon_factor": curr_c}
+                st.session_state.excel_authority = {"d": curr_d, "carbon_factor": curr_c, "tb": curr_tb}
                 st.session_state.show_success_modal = True
                 
-                # [關鍵] 儲存成功：強制跳轉回 Dashboard (Index 0)
                 st.session_state.force_tab_index = 0
                 st.rerun()
 
