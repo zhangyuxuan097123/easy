@@ -212,21 +212,24 @@ def calculate_metrics(demand, carbon_factor, _station_data, tb_value):
         pi = p * math.exp(-k * (tb_value - mu)**2)
         pi_list.append(pi)
     
-    product_p = 1.0
-    for p_val in p_list: product_p *= p_val
-    total_input = demand / product_p
+    # --- 【修改】計算全線投入量時，改為使用 pi 而非 p ---
+    product_pi = 1.0
+    for pi_val in pi_list: product_pi *= pi_val
+    total_input = demand / product_pi
     
+    # --- 【修改】每個工作站的傳遞輸入量也改用 pi 計算 ---
     inputs = []
     current_input = total_input
     for i in range(n):
         inputs.append(current_input)
-        current_input *= p_list[i]
+        current_input *= pi_list[i] 
     rounded_inputs = [math.ceil(x) for x in inputs]
 
     energies = power_list 
     calc_total_energy = sum(energies)
     calc_carbon = calc_total_energy * carbon_factor
 
+    # 耗損計算仍為「進入該站的量」乘上「1 - 該站的 pi」，因為 inputs 已經修正，所以 losses 也會自動校正
     losses = []
     for i in range(n):
         losses.append(inputs[i] * (1 - pi_list[i]))
@@ -446,18 +449,25 @@ with tab_dashboard:
 
         st.markdown("### 📉 系統可靠度敏感度分析")
         
-        def get_dynamic_crit_d(_station_data):
-            p_list = [st_data.get('p', 0.96) for st_data in _station_data]
+        # --- 【修改】動態計算臨界點也需要考量 pi 而非 p ---
+        def get_dynamic_crit_d(_station_data, _tb_val):
+            pi_list_local = []
+            for st_data in _station_data:
+                p_val = st_data.get('p', 0.96)
+                k_val = st_data.get('k', 0.15)
+                pi_val = p_val * math.exp(-k_val * (_tb_val - 1.0)**2)
+                pi_list_local.append(pi_val)
+                
             max_d_limits = []
             for i in range(len(_station_data)):
-                product_p_i_to_n = 1.0
+                product_pi_i_to_n = 1.0
                 for j in range(i, len(_station_data)):
-                    product_p_i_to_n *= p_list[j]
+                    product_pi_i_to_n *= pi_list_local[j]
                 max_cap = max(_station_data[i]["capacities"]) if _station_data[i]["capacities"] else 0
-                max_d_limits.append(max_cap * product_p_i_to_n)
+                max_d_limits.append(max_cap * product_pi_i_to_n)
             return int(math.floor(min(max_d_limits))) if max_d_limits else 1000
 
-        crit_d = get_dynamic_crit_d(STATION_DATA)
+        crit_d = get_dynamic_crit_d(STATION_DATA, tb_val)
         
         # 動態計算適當的步長
         step = max(500, (crit_d // 10 // 500) * 500)
