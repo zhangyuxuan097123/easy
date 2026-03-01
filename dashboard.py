@@ -212,12 +212,10 @@ def calculate_metrics(demand, carbon_factor, _station_data, tb_value):
         pi = p * math.exp(-k * (tb_value - mu)**2)
         pi_list.append(pi)
     
-    # --- 【修改】計算全線投入量時，改為使用 pi 而非 p ---
     product_pi = 1.0
     for pi_val in pi_list: product_pi *= pi_val
     total_input = demand / product_pi
     
-    # --- 【修改】每個工作站的傳遞輸入量也改用 pi 計算 ---
     inputs = []
     current_input = total_input
     for i in range(n):
@@ -229,7 +227,6 @@ def calculate_metrics(demand, carbon_factor, _station_data, tb_value):
     calc_total_energy = sum(energies)
     calc_carbon = calc_total_energy * carbon_factor
 
-    # 耗損計算仍為「進入該站的量」乘上「1 - 該站的 pi」，因為 inputs 已經修正，所以 losses 也會自動校正
     losses = []
     for i in range(n):
         losses.append(inputs[i] * (1 - pi_list[i]))
@@ -344,7 +341,9 @@ with tab_dashboard:
 
         sys_reliability = res['reliability']
         sys_carbon = res['carbon_emission']
-        sys_status = "green" if sys_reliability >= 0.9 else "yellow" if sys_reliability >= 0.8 else "red"
+        
+        sys_status = "green" if sys_reliability >= 0.95 else "yellow" if sys_reliability >= 0.9 else "red"
+        
         sys_anim = "kpi-pulse" if sys_status == "yellow" else "kpi-shake" if sys_status == "red" else ""
 
         node_states = []
@@ -357,7 +356,6 @@ with tab_dashboard:
         st.markdown("### 🕸️ 生產線即時拓樸監控")
         if "selected_node_idx" not in st.session_state: st.session_state.selected_node_idx = None
         
-        # --- 按鈕自訂名稱陣列 ---
         station_labels = ["🔽 吹瓶站", "🔽 充填站", "🔽 套標站", "🔽 包裝站", "🔽 疊棧站"]
 
         topo_cols = st.columns(FIXED_N)
@@ -388,7 +386,6 @@ with tab_dashboard:
                 html_content += "</div>" 
                 st.markdown(html_content, unsafe_allow_html=True)
                 
-                # 防呆：如果 Excel 中的站點數量大於定義的標籤數量，自動加上預設標籤
                 btn_label = station_labels[i] if i < len(station_labels) else f"🔽 工作站 {i+1}"
                 
                 if st.button(btn_label, key=f"btn_node_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
@@ -402,14 +399,16 @@ with tab_dashboard:
                 st_carbon = d_st['power'] * carbon_factor
                 st_loss = res['losses'][idx]
                 
+                detail_names = ["吹瓶站", "充填站", "套標站", "包裝站", "疊棧站"]
+                st_detail_name = detail_names[idx] if idx < len(detail_names) else f"工作站 {d_st['name']}"
+                
                 st.markdown(f"""
                 <div class="detail-card-highlight">
-                <h5 style="margin-bottom: 15px; color: #fff;">🔍 工作站 {d_st["name"]} 詳細數據</h5>
+                <h5 style="margin-bottom: 15px; color: #fff;">🔍 {st_detail_name} 詳細數據</h5>
                 <div style="display: flex; justify-content: space-between; text-align: center; gap: 10px;">
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">計畫輸入量</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{res["rounded_inputs"][idx]}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">功率 (kW)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st['power']}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">參數 k</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('k', 0.15)}</div></div>
-                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">原始率 p</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('p', 0.96)}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">實際運作率 pi</div><div style="font-size: 1.5rem; font-weight: 700; color: #4cd37a;">{res['pi_list'][idx]:.4f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">碳排放 (kg)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{st_carbon:.3f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">耗損 (qty)</div><div style="font-size: 1.5rem; font-weight: 700; color: #ff6b6b;">{st_loss:.3f}</div></div>
@@ -434,7 +433,7 @@ with tab_dashboard:
                 title=dict(text="各工作站耗損量", font=dict(size=22, color='black', weight='bold')),
                 paper_bgcolor='white', plot_bgcolor='white', height=350,
                 xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
-                yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'))
+                yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), rangemode='tozero')
             )
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
@@ -443,13 +442,12 @@ with tab_dashboard:
                 title=dict(text="各工作站功率 (kW)", font=dict(size=22, color='black', weight='bold')),
                 paper_bgcolor='white', plot_bgcolor='white', height=350,
                 xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
-                yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'))
+                yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), rangemode='tozero')
             )
             st.plotly_chart(fig2, use_container_width=True)
 
         st.markdown("### 📉 系統可靠度敏感度分析")
         
-        # --- 【修改】動態計算臨界點也需要考量 pi 而非 p ---
         def get_dynamic_crit_d(_station_data, _tb_val):
             pi_list_local = []
             for st_data in _station_data:
@@ -469,13 +467,10 @@ with tab_dashboard:
 
         crit_d = get_dynamic_crit_d(STATION_DATA, tb_val)
         
-        # 動態計算適當的步長
         step = max(500, (crit_d // 10 // 500) * 500)
         if step == 0: step = 500
 
-        # 將無聊的前段區域縮短，聚焦於發生變化的地方
-        start_d = int(min(demand * 0.8, max(500, crit_d - 8000)))
-        start_d = max(500, (start_d // 500) * 500)
+        start_d = 10000
 
         raw_range = np.arange(start_d, crit_d + step + 500, step)
         d_range_vals = np.sort(np.unique(np.concatenate((raw_range, [crit_d, crit_d + 1]))))
@@ -493,30 +488,29 @@ with tab_dashboard:
 
         fig3 = go.Figure()
         
-        fig3.add_trace(go.Scatter(x=d_range_vals, y=y_vals, mode='lines+markers', name='可靠度曲線', line=dict(color='#3fe6ff', width=3), marker=dict(size=8, color='#3fe6ff')))
+        fig3.add_trace(go.Scatter(x=d_range_vals, y=y_vals, mode='lines+markers', name='可靠度曲線', line=dict(color='#3fe6ff', width=3), marker=dict(size=8, color='#3fe6ff'), cliponaxis=False))
         
-        # 標記臨界點 (文字移往左上方 top left 防止右側被裁切)
         fig3.add_trace(go.Scatter(
             x=[crit_d], y=[crit_y], mode='markers+text',
             name=f'臨界點 (<span style="font-family: Times New Roman; font-style: italic;">d</span>={crit_d})',
             marker=dict(symbol='star', size=22, color='#ffd86b', line=dict(width=2, color='#ff0000')),
-            text=['★ 臨界點'], textposition="top left", textfont=dict(color="black", size=14)
+            text=['★ 臨界點'], textposition="top left", textfont=dict(color="black", size=14),
+            cliponaxis=False
         ))
         
-        # 標記當前位置 (文字固定在右上角 top right)
         fig3.add_trace(go.Scatter(
             x=[demand], y=[demand_y], mode='markers+text',
             name=f'當前輸出量 ({demand})',
             marker=dict(symbol='circle', size=14, color='#4cd37a', line=dict(width=2, color='#ffffff')),
-            text=['📍 當前位置'], textposition="top right", textfont=dict(color="black", size=14)
+            text=['📍 當前位置'], textposition="top right", textfont=dict(color="black", size=14),
+            cliponaxis=False
         ))
         
-        # 計算邊界留白 (Padding) 讓圖表不會貼著邊緣
         all_x_points = d_range_vals + [demand, crit_d]
         max_x_val = max(all_x_points)
-        min_x_val = min(all_x_points)
-        x_margin = max(step, (max_x_val - min_x_val) * 0.15) # 增加 15% 的 X 軸留白
+        x_margin = max(step, (max_x_val - 10000) * 0.15) 
         
+        # 👇 設定系統可靠度的兩軸，全面鎖定 autorange 阻斷 Plotly 自動擴張 👇
         fig3.update_layout(
             title=dict(text="系統可靠度敏感度分析", font=dict(size=22, color='black', weight='bold')),
             xaxis_title=dict(text="輸出量 (<span style='font-family: Times New Roman; font-style: italic;'>d</span>)", font=dict(size=18, color='black')), 
@@ -528,15 +522,20 @@ with tab_dashboard:
                 color='#000000', linecolor='#000000', linewidth=1, 
                 tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
                 zeroline=False, tickfont=dict(size=16, color='#000000', family='Arial'),
-                range=[min_x_val - x_margin, max_x_val + x_margin] # 加上動態左右留白
+                range=[10000, max_x_val + x_margin],
+                autorange=False,  # 強制鎖定 X 軸起點
+                fixedrange=True
             ),
             yaxis=dict(
                 title_font=dict(size=18, color='#000000', family='Arial'), 
                 color='#000000', linecolor='#000000', linewidth=1, 
                 tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
-                zeroline=False, tickmode='linear', tick0=0, dtick=0.2, 
+                zeroline=False,  
+                tickmode='array', tickvals=[0, 0.2, 0.4, 0.6, 0.8, 1.0], 
                 tickfont=dict(size=16, color='#000000', family='Arial'),
-                range=[-0.15, 1.25] # 固定 Y 軸上下限，留出頂部與底部空間放置 Label
+                range=[0, 1.05],  # 頂部留白以容納標記，底部嚴格切齊 0
+                autorange=False,  # 強制鎖定 Y 軸起點
+                fixedrange=True  
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
@@ -545,7 +544,6 @@ with tab_dashboard:
         df_res = pd.DataFrame({
             "工作站": stations, 
             "參數 k": [d.get("k", 0.15) for d in STATION_DATA],
-            "原始率 p": [d.get("p", 0.96) for d in STATION_DATA],
             "運作率 pi": [f"{pi:.4f}" for pi in res["pi_list"]],
             "計畫輸入量": res["inputs"], 
             "取整輸入量": res["rounded_inputs"],
@@ -592,7 +590,7 @@ with tab_editor:
         disabled=["k"], 
         column_config={
             "Station": st.column_config.NumberColumn("站號", min_value=1, step=1, required=True),
-            "p": st.column_config.NumberColumn("原始率 p", min_value=0.0001, max_value=1.0),
+            "p": None, # 隱藏此欄位
             "power": st.column_config.NumberColumn("功率 (kW)"),
             "k": st.column_config.NumberColumn("參數 k", format="%.2f"),
             "capacities": st.column_config.TextColumn("產能列表 (List)", help="例如 [0, 100, 200]"),
