@@ -10,6 +10,12 @@ import time
 from datetime import datetime
 import streamlit.components.v1 as components
 
+# --- 輔助函式：產生 a 的斜體加下標字元 (用於 DataFrame 與圖表標籤) ---
+def get_a_subscript(val):
+    sub_map = str.maketrans("0123456789", "₀₁₂₃₄₅₆₇₈₉")
+    # 使用 Unicode 斜體數學字元 𝑎 (U+1D44E)
+    return f"𝑎{str(val).translate(sub_map)}"
+
 # --- 0. 基本設定 ---
 st.set_page_config(page_title="基於生成式AI與網路可靠度於製造系統戰情儀表設計", page_icon="🏭", layout="wide", initial_sidebar_state="expanded")
 
@@ -65,9 +71,13 @@ st.markdown(
     }
     .topo-node { 
         width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; 
-        font-weight: bold; font-size: 1.2rem; color: #fff; border: 3px solid rgba(255,255,255,0.3); 
+        color: #fff; border: 3px solid rgba(255,255,255,0.3); 
         box-shadow: 0 4px 10px rgba(0,0,0,0.3); transition: all 0.3s ease; position: relative; z-index: 2; background: #23395B; 
     }
+    .topo-node-content { display: inline-flex; align-items: baseline; justify-content: center; }
+    .topo-node i { font-family: 'Times New Roman', serif; font-size: 1.6rem; font-weight: 700; font-style: italic; }
+    .topo-node sub { font-size: 0.8rem; font-weight: 900; margin-left: 2px; }
+    
     .node-green { background: linear-gradient(135deg, #4cd37a, #218838); box-shadow: 0 0 15px rgba(76, 211, 122, 0.4); }
     .node-yellow { background: linear-gradient(135deg, #ffd86b, #e0a800); box-shadow: 0 0 15px rgba(255, 216, 107, 0.4); }
     .node-red { background: linear-gradient(135deg, #ff6b6b, #c82333); box-shadow: 0 0 15px rgba(255, 107, 107, 0.6); }
@@ -330,14 +340,20 @@ with tab_dashboard:
 
             demand = st.number_input("輸出量 ($d$)", min_value=1, value=int(def_d), step=100)
             carbon_factor = st.number_input("CO₂ 係數 (kg/kWh)", min_value=0.001, value=float(def_c), step=0.001, format="%.3f")
-            tb_val = st.slider("厚度參數 ($Tb$)", min_value=0.8, max_value=1.2, value=float(def_tb), step=0.01)
+            tb_val = st.slider("厚度參數 ($t_b$)", min_value=0.8, max_value=1.2, value=float(def_tb), step=0.01)
             
             st.divider()
             
             res = calculate_metrics(demand, carbon_factor, STATION_DATA, tb_val)
             
-            if res['reliability'] < 0.8: st.error(f"可靠度過低：{res['reliability']:.4f}")
-            else: st.success(f"可靠度正常：{res['reliability']:.4f}")
+            rel_val = res['reliability']
+            
+            sys_status_sidebar = "green" if rel_val >= 0.95 else "yellow" if rel_val >= 0.9 else "red"
+            status_colors = {"green": "#4cd37a", "yellow": "#ffd86b", "red": "#ff6b6b"}
+            status_bgs = {"green": "rgba(76, 211, 122, 0.05)", "yellow": "rgba(255, 216, 107, 0.05)", "red": "rgba(255, 107, 107, 0.05)"}
+            status_texts = {"green": "可靠度正常", "yellow": "可靠度警告", "red": "可靠度過低"}
+            
+            st.markdown(f'<div style="background-color: {status_bgs[sys_status_sidebar]}; padding: 12px; border-radius: 8px; text-align: center; margin-top: 10px;"><span style="color: {status_colors[sys_status_sidebar]}; font-weight: 700; font-size: 16px;">{status_texts[sys_status_sidebar]} : {rel_val:.4f}</span></div>', unsafe_allow_html=True)
 
         sys_reliability = res['reliability']
         sys_carbon = res['carbon_emission']
@@ -373,7 +389,8 @@ with tab_dashboard:
                 if i > 0:
                     html_content += '<div class="pre-connector-line"></div>'
 
-                html_content += f"""<div class="topo-node {node_states[i]}">{STATION_DATA[i]["id"]}</div>"""
+                # 使用 div 包覆達成完美對齊下標
+                html_content += f"""<div class="topo-node {node_states[i]}"><div class="topo-node-content"><i>a</i><sub>{STATION_DATA[i]["id"]}</sub></div></div>"""
                 
                 if i == FIXED_N - 1:
                      html_content += """
@@ -386,10 +403,14 @@ with tab_dashboard:
                 html_content += "</div>" 
                 st.markdown(html_content, unsafe_allow_html=True)
                 
-                btn_label = station_labels[i] if i < len(station_labels) else f"🔽 工作站 {i+1}"
+                btn_label = station_labels[i] if i < len(station_labels) else f"🔽 工作站 {get_a_subscript(STATION_DATA[i]['id'])}"
                 
+                # 開關切換邏輯 (Toggle)：點擊當前已選定的按鈕，會將其關閉
                 if st.button(btn_label, key=f"btn_node_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
-                    st.session_state.selected_node_idx = i
+                    if st.session_state.selected_node_idx == i:
+                        st.session_state.selected_node_idx = None
+                    else:
+                        st.session_state.selected_node_idx = i
                     st.rerun()
 
         if st.session_state.selected_node_idx is not None:
@@ -400,22 +421,22 @@ with tab_dashboard:
                 st_loss = res['losses'][idx]
                 
                 detail_names = ["吹瓶站", "充填站", "套標站", "包裝站", "疊棧站"]
-                st_detail_name = detail_names[idx] if idx < len(detail_names) else f"工作站 {d_st['name']}"
+                st_detail_name = detail_names[idx] if idx < len(detail_names) else f"工作站 {get_a_subscript(d_st['id'])}"
                 
                 st.markdown(f"""
                 <div class="detail-card-highlight">
                 <h5 style="margin-bottom: 15px; color: #fff;">🔍 {st_detail_name} 詳細數據</h5>
                 <div style="display: flex; justify-content: space-between; text-align: center; gap: 10px;">
-                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">計畫輸入量</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{res["rounded_inputs"][idx]}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">投入量</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{res["rounded_inputs"][idx]}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">功率 (kW)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st['power']}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">參數 k</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('k', 0.15)}</div></div>
-                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">實際運作率 pi</div><div style="font-size: 1.5rem; font-weight: 700; color: #4cd37a;">{res['pi_list'][idx]:.4f}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">品質調整後成功率</div><div style="font-size: 1.5rem; font-weight: 700; color: #ffffff;">{res['pi_list'][idx]:.4f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">碳排放 (kg)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{st_carbon:.3f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">耗損 (qty)</div><div style="font-size: 1.5rem; font-weight: 700; color: #ff6b6b;">{st_loss:.3f}</div></div>
                 </div></div>""", unsafe_allow_html=True)
 
         k1, k2, k3, k4, k5 = st.columns([1,1,1,1,1], gap="large")
-        with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">(R<sub>d</sub>)</span></div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
+        with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 (<span style="font-family: \'Times New Roman\', serif; font-style: italic;">R<sub>d</sub></span>)</div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
         with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">d</span></div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
         with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">總功率 (<span style="font-family: \'Times New Roman\', serif;">kW</span>)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
         c_color = "green" if sys_carbon < 250 else "yellow" if sys_carbon < 300 else "red"
@@ -424,25 +445,32 @@ with tab_dashboard:
         with k5: st.markdown(f'<div class="kpi-box kpi-border-red"><div class="kpi-label">總耗損 (qty)</div><div class="kpi-value">{res["total_loss"]:.3f}</div></div>', unsafe_allow_html=True)
 
         st.divider()
-        st.header("📈 數據視覺化分析")
-        stations = [d["name"] for d in STATION_DATA]
+        st.markdown("### 📈 數據視覺化分析")
+        
+        # 使用 Unicode 產生的斜體下標標籤
+        plot_stations = [get_a_subscript(d['id']) for d in STATION_DATA]
+        
+        # 計算圖表的最大值，讓 Y 軸的 range 可以準確壓在 0 上，不會有懸空 padding
+        max_loss = max(res["losses"]) if res["losses"] else 1
+        max_energy = max(res["energies"]) if res["energies"] else 1
+        
         c1, c2 = st.columns(2)
         with c1:
-            fig1 = go.Figure(go.Bar(x=stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
+            fig1 = go.Figure(go.Bar(x=plot_stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
             fig1.update_layout(
                 title=dict(text="各工作站耗損量", font=dict(size=22, color='black', weight='bold')),
-                paper_bgcolor='white', plot_bgcolor='white', height=350,
-                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
-                yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), rangemode='tozero')
+                paper_bgcolor='white', plot_bgcolor='white', height=350, margin=dict(b=0), # 減小底部 margin
+                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=18, color='#000000', family='Times New Roman')),
+                yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), range=[0, max_loss * 1.15]) # 強制範圍以移除底部懸空
             )
             st.plotly_chart(fig1, use_container_width=True)
         with c2:
-            fig2 = go.Figure(go.Bar(x=stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
+            fig2 = go.Figure(go.Bar(x=plot_stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
             fig2.update_layout(
                 title=dict(text="各工作站功率 (kW)", font=dict(size=22, color='black', weight='bold')),
-                paper_bgcolor='white', plot_bgcolor='white', height=350,
-                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial')),
-                yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), rangemode='tozero')
+                paper_bgcolor='white', plot_bgcolor='white', height=350, margin=dict(b=0), # 減小底部 margin
+                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=18, color='#000000', family='Times New Roman')),
+                yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), range=[0, max_energy * 1.15]) # 強制範圍以移除底部懸空
             )
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -510,7 +538,6 @@ with tab_dashboard:
         max_x_val = max(all_x_points)
         x_margin = max(step, (max_x_val - 10000) * 0.15) 
         
-        # 👇 設定系統可靠度的兩軸，全面鎖定 autorange 阻斷 Plotly 自動擴張 👇
         fig3.update_layout(
             title=dict(text="系統可靠度敏感度分析", font=dict(size=22, color='black', weight='bold')),
             xaxis_title=dict(text="輸出量 (<span style='font-family: Times New Roman; font-style: italic;'>d</span>)", font=dict(size=18, color='black')), 
@@ -523,7 +550,7 @@ with tab_dashboard:
                 tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
                 zeroline=False, tickfont=dict(size=16, color='#000000', family='Arial'),
                 range=[10000, max_x_val + x_margin],
-                autorange=False,  # 強制鎖定 X 軸起點
+                autorange=False,  
                 fixedrange=True
             ),
             yaxis=dict(
@@ -533,19 +560,22 @@ with tab_dashboard:
                 zeroline=False,  
                 tickmode='array', tickvals=[0, 0.2, 0.4, 0.6, 0.8, 1.0], 
                 tickfont=dict(size=16, color='#000000', family='Arial'),
-                range=[0, 1.05],  # 頂部留白以容納標記，底部嚴格切齊 0
-                autorange=False,  # 強制鎖定 Y 軸起點
+                range=[0, 1.05],  
+                autorange=False,  
                 fixedrange=True  
             )
         )
         st.plotly_chart(fig3, use_container_width=True)
 
-        st.header("📋 工作站狀態表")
+        st.markdown("### 📋 工作站狀態表")
+        
+        table_stations = [get_a_subscript(d["id"]) for d in STATION_DATA]
+        
         df_res = pd.DataFrame({
-            "工作站": stations, 
+            "工作站": table_stations, 
             "參數 k": [d.get("k", 0.15) for d in STATION_DATA],
-            "運作率 pi": [f"{pi:.4f}" for pi in res["pi_list"]],
-            "計畫輸入量": res["inputs"], 
+            "品質調整後成功率": [f"{pi:.4f}" for pi in res["pi_list"]],
+            "投入量": res["inputs"], 
             "取整輸入量": res["rounded_inputs"],
             "功率 (kW)": res["energies"], 
             "實際耗損 (qty)": res["losses"],
@@ -589,7 +619,7 @@ with tab_editor:
         on_change=maintain_editor_tab,
         disabled=["k"], 
         column_config={
-            "Station": st.column_config.NumberColumn("站號", min_value=1, step=1, required=True),
+            "Station": st.column_config.NumberColumn("站號 (𝑎ₙ)", min_value=1, step=1, required=True),
             "p": None, # 隱藏此欄位
             "power": st.column_config.NumberColumn("功率 (kW)"),
             "k": st.column_config.NumberColumn("參數 k", format="%.2f"),
