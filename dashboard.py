@@ -338,7 +338,7 @@ with tab_dashboard:
             def_c = auth_data.get("carbon_factor", 0.474)
             def_tb = auth_data.get("tb", 0.8)
 
-            demand = st.number_input("輸出量 ($d$)", min_value=1, value=int(def_d), step=100)
+            demand = st.number_input("輸出量 (𝑑)", min_value=1, value=int(def_d), step=100)
             carbon_factor = st.number_input("CO₂ 係數 (kg/kWh)", min_value=0.001, value=float(def_c), step=0.001, format="%.3f")
             tb_val = st.slider("厚度參數 ($t_b$)", min_value=0.8, max_value=1.2, value=float(def_tb), step=0.01)
             
@@ -429,7 +429,7 @@ with tab_dashboard:
                 <div style="display: flex; justify-content: space-between; text-align: center; gap: 10px;">
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">投入量</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{res["rounded_inputs"][idx]}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">功率 (kW)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st['power']}</div></div>
-                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">參數 k</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('k', 0.15)}</div></div>
+                <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">參數 (𝑘)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{d_st.get('k', 0.15)}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">品質調整後成功率</div><div style="font-size: 1.5rem; font-weight: 700; color: #ffffff;">{res['pi_list'][idx]:.4f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">碳排放 (kg)</div><div style="font-size: 1.5rem; font-weight: 700; color: #fff;">{st_carbon:.3f}</div></div>
                 <div style="flex: 1;"><div style="font-size: 0.9rem; color: rgba(255,255,255,0.7); margin-bottom: 4px;">耗損 (qty)</div><div style="font-size: 1.5rem; font-weight: 700; color: #ff6b6b;">{st_loss:.3f}</div></div>
@@ -437,7 +437,7 @@ with tab_dashboard:
 
         k1, k2, k3, k4, k5 = st.columns([1,1,1,1,1], gap="large")
         with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 (<span style="font-family: \'Times New Roman\', serif; font-style: italic;">R<sub>d</sub></span>)</div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
-        with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 <span style="font-family: \'Times New Roman\', serif; font-style: italic;">d</span></div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
+        with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 (𝑑)</div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
         with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">總功率 (<span style="font-family: \'Times New Roman\', serif;">kW</span>)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
         c_color = "green" if sys_carbon < 250 else "yellow" if sys_carbon < 300 else "red"
         
@@ -565,14 +565,14 @@ with tab_dashboard:
         
         fig3.add_trace(go.Scatter(
             x=[crit_d], y=[crit_y], mode='markers',
-            name=f'臨界點 (<span style="font-family: Times New Roman; font-style: italic;">d</span>={crit_d})',
+            name=f'臨界點 ((𝑑)={crit_d})',
             marker=dict(symbol='star', size=22, color='#ffd86b', line=dict(width=2, color='#ff0000')),
             cliponaxis=False
         ))
         
         fig3.add_trace(go.Scatter(
             x=[demand], y=[demand_y], mode='markers',
-            name=f'當前輸出量 ({demand})',
+            name=f'當前輸出量 ((𝑑)={demand})',
             marker=dict(symbol='circle', size=14, color='#4cd37a', line=dict(width=2, color='#ffffff')),
             cliponaxis=False
         ))
@@ -583,7 +583,7 @@ with tab_dashboard:
         
         fig3.update_layout(
             title=dict(text="系統可靠度敏感度分析", font=dict(size=22, color='black', weight='bold')),
-            xaxis_title=dict(text="輸出量 (<span style='font-family: Times New Roman; font-style: italic;'>d</span>)", font=dict(size=18, color='black')), 
+            xaxis_title=dict(text="輸出量 (𝑑)", font=dict(size=18, color='black')), 
             yaxis_title=dict(text="系統可靠度", font=dict(size=18, color='black')),
             paper_bgcolor='white', plot_bgcolor='white', height=400, margin=dict(l=20, r=20, t=40, b=20),
             legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99, font=dict(color="black", size=14)),
@@ -626,7 +626,7 @@ with tab_dashboard:
         
         df_res = pd.DataFrame({
             "工作站": table_stations, 
-            "參數 k": [d.get("k", 0.15) for d in STATION_DATA],
+            "參數 (𝑘)": [d.get("k", 0.15) for d in STATION_DATA],
             "品質調整後成功率": [f"{pi:.4f}" for pi in res["pi_list"]],
             "投入量": res["inputs"], 
             "取整輸入量": res["rounded_inputs"],
@@ -675,7 +675,7 @@ with tab_editor:
             "Station": st.column_config.NumberColumn("站號 (𝑎ₙ)", min_value=1, step=1, required=True),
             "p": None, # 隱藏此欄位
             "power": st.column_config.NumberColumn("功率 (kW)"),
-            "k": st.column_config.NumberColumn("參數 k", format="%.2f"),
+            "k": st.column_config.NumberColumn("參數 (𝑘)", format="%.2f"),
             "capacities": st.column_config.TextColumn("產能列表 (List)", help="例如 [0, 100, 200]"),
             "probs": st.column_config.TextColumn("機率列表 (List)", help="例如 [0.1, 0.4, 0.5]")
         }
