@@ -459,18 +459,63 @@ with tab_dashboard:
             fig1 = go.Figure(go.Bar(x=plot_stations, y=res["losses"], marker_color='#60d3ff', name="耗損量"))
             fig1.update_layout(
                 title=dict(text="各工作站耗損量", font=dict(size=22, color='black', weight='bold')),
-                paper_bgcolor='white', plot_bgcolor='white', height=350, margin=dict(b=0), # 減小底部 margin
-                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=18, color='#000000', family='Times New Roman')),
-                yaxis=dict(title=dict(text='耗損量', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), range=[0, max_loss * 1.15]) # 強制範圍以移除底部懸空
+                paper_bgcolor='white', plot_bgcolor='white', height=350, margin=dict(b=0),
+                xaxis=dict(
+                    title=dict(text='工作站', font=dict(size=18, color='black')), 
+                    type='category', 
+                    color='#000000', 
+                    showline=False,      # 隱藏預設會懸空的 X 軸線
+                    ticks='',            # 關閉小刻度線
+                    ticklen=0,           # 強制刻度長度為 0
+                    tickfont=dict(size=18, color='#000000', family='Times New Roman')
+                ),
+                yaxis=dict(
+                    title=dict(text='耗損量', font=dict(size=18, color='black')), 
+                    color='#000000', 
+                    showline=True, 
+                    linecolor='#000000', 
+                    tickcolor='#000000', 
+                    gridcolor='#000000', 
+                    tickfont=dict(size=16, color='#000000', family='Arial'), 
+                    range=[0, max_loss * 1.15],
+                    autorange=False,           # 強制關閉自動縮放，避免底部留白
+                    rangemode='tozero',        # 強制從 0 開始
+                    zeroline=True,             # 使用真正的數學 Y=0 線作為底線，長條圖才能完美貼齊
+                    zerolinecolor='#000000',   # 將底線設為黑色
+                    zerolinewidth=1
+                ) 
             )
             st.plotly_chart(fig1, use_container_width=True)
+            
         with c2:
             fig2 = go.Figure(go.Bar(x=plot_stations, y=res["energies"], marker_color='#ffcf60', name="功率"))
             fig2.update_layout(
                 title=dict(text="各工作站功率 (kW)", font=dict(size=22, color='black', weight='bold')),
-                paper_bgcolor='white', plot_bgcolor='white', height=350, margin=dict(b=0), # 減小底部 margin
-                xaxis=dict(title=dict(text='工作站', font=dict(size=18, color='black')), type='category', color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=18, color='#000000', family='Times New Roman')),
-                yaxis=dict(title=dict(text='功率 (kW)', font=dict(size=18, color='black')), color='#000000', linecolor='#000000', tickcolor='#000000', gridcolor='#000000', tickfont=dict(size=16, color='#000000', family='Arial'), range=[0, max_energy * 1.15]) # 強制範圍以移除底部懸空
+                paper_bgcolor='white', plot_bgcolor='white', height=350, margin=dict(b=0),
+                xaxis=dict(
+                    title=dict(text='工作站', font=dict(size=18, color='black')), 
+                    type='category', 
+                    color='#000000', 
+                    showline=False,      # 隱藏預設會懸空的 X 軸線
+                    ticks='',            # 關閉小刻度線
+                    ticklen=0,           # 強制刻度長度為 0
+                    tickfont=dict(size=18, color='#000000', family='Times New Roman')
+                ),
+                yaxis=dict(
+                    title=dict(text='功率 (kW)', font=dict(size=18, color='black')), 
+                    color='#000000', 
+                    showline=True, 
+                    linecolor='#000000', 
+                    tickcolor='#000000', 
+                    gridcolor='#000000', 
+                    tickfont=dict(size=16, color='#000000', family='Arial'), 
+                    range=[0, max_energy * 1.15],
+                    autorange=False,           # 強制關閉自動縮放，避免底部留白
+                    rangemode='tozero',        # 強制從 0 開始
+                    zeroline=True,             # 使用真正的數學 Y=0 線作為底線，長條圖才能完美貼齊
+                    zerolinecolor='#000000',   # 將底線設為黑色
+                    zerolinewidth=1
+                )
             )
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -519,18 +564,16 @@ with tab_dashboard:
         fig3.add_trace(go.Scatter(x=d_range_vals, y=y_vals, mode='lines+markers', name='可靠度曲線', line=dict(color='#3fe6ff', width=3), marker=dict(size=8, color='#3fe6ff'), cliponaxis=False))
         
         fig3.add_trace(go.Scatter(
-            x=[crit_d], y=[crit_y], mode='markers+text',
+            x=[crit_d], y=[crit_y], mode='markers',
             name=f'臨界點 (<span style="font-family: Times New Roman; font-style: italic;">d</span>={crit_d})',
             marker=dict(symbol='star', size=22, color='#ffd86b', line=dict(width=2, color='#ff0000')),
-            text=['★ 臨界點'], textposition="top left", textfont=dict(color="black", size=14),
             cliponaxis=False
         ))
         
         fig3.add_trace(go.Scatter(
-            x=[demand], y=[demand_y], mode='markers+text',
+            x=[demand], y=[demand_y], mode='markers',
             name=f'當前輸出量 ({demand})',
             marker=dict(symbol='circle', size=14, color='#4cd37a', line=dict(width=2, color='#ffffff')),
-            text=['📍 當前位置'], textposition="top right", textfont=dict(color="black", size=14),
             cliponaxis=False
         ))
         
@@ -546,8 +589,11 @@ with tab_dashboard:
             legend=dict(yanchor="top", y=0.99, xanchor="right", x=0.99, font=dict(color="black", size=14)),
             xaxis=dict(
                 title_font=dict(size=18, color='#000000', family='Arial'), 
-                color='#000000', linecolor='#000000', linewidth=1, 
-                tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
+                color='#000000',
+                showline=False,      # 隱藏預設會懸空的 X 軸線
+                ticks='',            # 關閉小刻度線
+                ticklen=0,           # 強制刻度長度為 0
+                gridcolor='#000000', gridwidth=1, 
                 zeroline=False, tickfont=dict(size=16, color='#000000', family='Arial'),
                 range=[10000, max_x_val + x_margin],
                 autorange=False,  
@@ -555,13 +601,20 @@ with tab_dashboard:
             ),
             yaxis=dict(
                 title_font=dict(size=18, color='#000000', family='Arial'), 
-                color='#000000', linecolor='#000000', linewidth=1, 
-                tickcolor='#000000', tickwidth=1, gridcolor='#000000', gridwidth=1, 
-                zeroline=False,  
+                color='#000000', 
+                showline=True,       # 顯示左側垂直線
+                linecolor='#000000', linewidth=1, 
+                ticks='',            # 關閉小刻度線
+                ticklen=0,           # 強制刻度長度為 0
+                gridcolor='#000000', gridwidth=1, 
+                zeroline=True,             # 使用真正的數學 Y=0 線作為底線
+                zerolinecolor='#000000',   # 將底線設為黑色
+                zerolinewidth=1,
                 tickmode='array', tickvals=[0, 0.2, 0.4, 0.6, 0.8, 1.0], 
                 tickfont=dict(size=16, color='#000000', family='Arial'),
                 range=[0, 1.05],  
                 autorange=False,  
+                rangemode='tozero',        # 強制從 0 開始
                 fixedrange=True  
             )
         )
