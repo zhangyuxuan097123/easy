@@ -351,19 +351,19 @@ with tab_dashboard:
             status_texts = {"green": "可靠度正常", "yellow": "可靠度警告", "red": "可靠度過低"}
             st.markdown(f'<div style="background-color: {status_bgs[sys_status_sidebar]}; padding: 12px; border-radius: 8px; text-align: center; margin-top: 10px;"><span style="color: {status_colors[sys_status_sidebar]}; font-weight: 700; font-size: 16px;">{status_texts[sys_status_sidebar]} : {rel_val:.4f}</span></div>', unsafe_allow_html=True)
 
-            # 新增：緊貼邊緣、沒有任何空白縮排的 HTML 區塊，保證不會被誤判為 Code Block！
+            # 更新：斜體化的 Rd 且括號為普通字體
             st.markdown(
 """<div style="padding:15px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; margin-top: 25px; border: 1px solid rgba(255,255,255,0.1);">
 <h4 style="margin-top:0; color:#e6eef6; font-size: 16px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;">🚦 狀態燈號閾值說明</h4>
 <div style="font-size: 0.9rem; color: #ddd; margin-top: 10px;">
-<div style="margin-bottom: 8px;"><b>系統可靠度 (R<sub>d</sub>)</b></div>
+<div style="margin-bottom: 8px;"><b>系統可靠度 (<span style="font-family: 'Times New Roman', serif; font-style: italic;">R<sub>d</sub></span>)</b></div>
 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#4cd37a;">🟢 正常 (Green)</span> <span>≥ 0.95</span></div>
 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#ffd86b;">🟡 警告 (Yellow)</span> <span>0.90 ~ 0.949</span></div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 16px;"><span style="color:#ff6b6b;">🔴 危險 (Red)</span> <span>&lt; 0.90</span></div>
+<div style="display: flex; justify-content: space-between; margin-bottom: 16px;"><span style="color:#ff6b6b;">🔴 危險 (Red)</span> <span>＜ 0.90</span></div>
 <div style="margin-bottom: 8px;"><b>總碳排放 (kg)</b></div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#4cd37a;">🟢 正常 (Green)</span> <span>&lt; 250</span></div>
-<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#ffd86b;">🟡 警告 (Yellow)</span> <span>250 ~ 299</span></div>
-<div style="display: flex; justify-content: space-between;"><span style="color:#ff6b6b;">🔴 危險 (Red)</span> <span>≥ 300</span></div>
+<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#4cd37a;">🟢 正常 (Green)</span> <span>0 ~ 70</span></div>
+<div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#ffd86b;">🟡 警告 (Yellow)</span> <span>71 ~ 100</span></div>
+<div style="display: flex; justify-content: space-between;"><span style="color:#ff6b6b;">🔴 危險 (Red)</span> <span>＞ 100</span></div>
 </div>
 </div>""", unsafe_allow_html=True)
 
@@ -424,7 +424,10 @@ with tab_dashboard:
         with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 (<span style="font-family: \'Times New Roman\', serif; font-style: italic;">R<sub>d</sub></span>)</div><div class="kpi-value">{res["reliability"]:.4f}</div></div>', unsafe_allow_html=True)
         with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 (𝑑)</div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
         with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">動態總功率 (<span style="font-family: \'Times New Roman\', serif;">kW</span>)</div><div class="kpi-value">{res["total_energy"]:.3f}</div></div>', unsafe_allow_html=True)
-        c_color = "green" if sys_carbon < 250 else "yellow" if sys_carbon < 300 else "red"
+        
+        # 更新：碳排放 KPI 數值框的顏色判定邏輯
+        c_color = "green" if sys_carbon <= 70 else "yellow" if sys_carbon <= 100 else "red"
+        
         with k4: st.markdown(f'<div class="kpi-box kpi-border-{c_color}"><div class="kpi-label">總碳排放 (kg)</div><div class="kpi-value">{res["carbon_emission"]:.3f}</div></div>', unsafe_allow_html=True)
         with k5: st.markdown(f'<div class="kpi-box kpi-border-red"><div class="kpi-label">總耗損 (qty)</div><div class="kpi-value">{res["total_loss"]:.3f}</div></div>', unsafe_allow_html=True)
 
