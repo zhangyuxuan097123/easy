@@ -27,7 +27,7 @@ st.markdown("""
 
 .stApp { background: #23395B !important; color: #e6eef6; font-family: 'Inter', sans-serif; }
 
-/* 終極防裁切安全邊距：左右加大 padding，保證 Input / Output 絕對不被裁掉 */
+/* 防裁切與安全邊距：加大兩側空間，防止拓樸圖超出螢幕被切掉 */
 .block-container { 
     padding-top: 2rem !important; padding-bottom: 2rem !important; 
     padding-left: 7rem !important; padding-right: 10rem !important; 
@@ -322,12 +322,11 @@ with tab_dashboard:
         station_labels = ["🔽 吹瓶站", "🔽 充填站", "🔽 套標站", "🔽 包裝站", "🔽 疊棧站"]
 
         # -----------------------------------------------------------------------------------
-        # 終極數學完美對齊法：
-        # 使用 st.columns(FIXED_N) 剛好產生 5 個欄位，每欄放置一個按鈕。
-        # 拓樸圖「直接綁定」在按鈕上方的同一個欄位內！
-        # 透過 width: calc(100% + 1rem) 讓連接線橫跨 Streamlit 欄位縫隙，
-        # 從而保證按鈕「必定100%對齊」上方線條的正中央！
-        # 且 Input 和 Output 會被包含在加大的 Safe Padding 內，絕對不裁切。
+        # 終極排版對齊：
+        # - n0 裡面空白
+        # - n1 ~ n4 裡面有字
+        # - n5 裡面空白
+        # - Output 線條無縫貼緊 n5 圓圈！
         # -----------------------------------------------------------------------------------
         
         btn_cols = st.columns(FIXED_N)
@@ -336,37 +335,59 @@ with tab_dashboard:
                 is_first = (i == 0)
                 is_last = (i == FIXED_N - 1)
                 
-                node_id = STATION_DATA[i]["id"]
-                prev_node_id = "0" if is_first else STATION_DATA[i-1]["id"]
+                # 計算線段在欄位中的偏移與長度
+                if FIXED_N == 1:
+                    line_left = "0"
+                    line_width = "100%"
+                    node_left_pos = "0"
+                else:
+                    if is_first:
+                        line_left = "0"
+                        line_width = "calc(100% + 0.5rem)"
+                        node_left_pos = "0"
+                    elif is_last:
+                        line_left = "-0.5rem"
+                        line_width = "calc(100% + 0.5rem)"
+                        node_left_pos = "-0.5rem"
+                    else:
+                        line_left = "-0.5rem"
+                        line_width = "calc(100% + 1rem)"
+                        node_left_pos = "-0.5rem"
+                
                 n_class = node_states[i]
                 prev_n_class = "node-green" if is_first else node_states[i-1]
+                node_id = STATION_DATA[i]["id"]
+                prev_node_id = "0" if is_first else STATION_DATA[i-1]["id"]
                 
-                # HTML 容器
                 html = '<div style="position: relative; width: 100%; height: 100px; display: flex; justify-content: center; align-items: center; z-index: 0;">'
                 
-                # 1. 畫連接線 a_i：長度為 "欄位寬度(100%) + Streamlit縫隙(1rem)"，完美填補空隙
-                html += f'<div style="position: absolute; left: 0; width: calc(100% + 1rem); height: 2px; background: #ccc; top: 50%; transform: translateY(-50%); z-index: 1;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div>'
+                # 1. 畫連接線 a_i
+                html += f'<div style="position: absolute; left: {line_left}; width: {line_width}; height: 2px; background: #ccc; top: 50%; transform: translateY(-50%); z-index: 1;"><div style="position: absolute; right: 28px; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div>'
                 
-                # 2. 畫弧線標籤 a_i：精準定位在線條的正中央
-                html += f'<div class="arc-label" style="position: absolute; top: 15px; left: calc(50% + 0.5rem); transform: translateX(-50%); z-index: 3;"><i>a</i><sub>{node_id}</sub></div>'
+                # 2. 畫弧線標籤 a_i
+                html += f'<div class="arc-label" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 3;"><i>a</i><sub>{node_id}</sub></div>'
                 
-                # 3. 畫左側的圓圈 n_{i-1}：定位在欄位的最左側邊線上
-                html += f'<div style="position: absolute; left: 0; top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
+                # 3. 畫左側的圓圈 n_{i-1}
+                html += f'<div style="position: absolute; left: {node_left_pos}; top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
                 
-                # 如果是第一欄，要在最左側圓圈外加上 Input
                 if is_first:
-                    html += '<span style="position: absolute; right: 100%; margin-right: 15px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Input</span>'
-                    
-                if is_first:
+                    # 第一欄：外掛 Input 與連接箭頭，且 n0 裡面不放字
+                    html += '<div style="position: absolute; right: 100%; display: flex; align-items: center;"><span style="margin-right: 8px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Input</span><div style="width: 30px; height: 2px; background: #ccc; position: relative; margin-right: 5px;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div></div>'
                     html += f'<div class="topo-node {prev_n_class}"><div class="topo-node-content"></div></div></div>'
                 else:
+                    # 中間欄：n1~n4 裡面放字
                     html += f'<div class="topo-node {prev_n_class}"><div class="topo-node-content"><i>n</i><sub>{prev_node_id}</sub></div></div></div>'
                 
-                # 4. 如果是最後一欄，還要補畫右側的最後一個圓圈 n_N，以及 Output 標籤
+                # 4. 如果是最後一欄，補畫右側最後一個圓圈 n_N，以及 Output 標籤
                 if is_last:
-                    html += f'<div style="position: absolute; left: calc(100% + 1rem); top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
+                    html += f'<div style="position: absolute; left: calc(100% + 0.5rem); top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
+                    
+                    # 最後一顆圓圈 n5 不放字
                     html += f'<div class="topo-node {n_class}"><div class="topo-node-content"></div></div>'
-                    html += '<div style="position: absolute; left: 100%; margin-left: 27.5px; display: flex; align-items: center;"><div style="width: 30px; height: 2px; background: #ccc; position: relative;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div><span style="margin-left: 10px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Output</span></div>'
+                    
+                    # 移除了 margin-left，讓 Output 線條直接無縫貼緊 n5 圓圈邊緣
+                    html += '<div style="position: absolute; left: 100%; display: flex; align-items: center;"><div style="width: 30px; height: 2px; background: #ccc; position: relative;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div><span style="margin-left: 10px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Output</span></div>'
+                    
                     html += '</div>'
                     
                 html += '</div>'
@@ -374,7 +395,7 @@ with tab_dashboard:
                 # 渲染拓樸圖
                 st.markdown(html, unsafe_allow_html=True)
                 
-                # 渲染按鈕 (因為與拓樸圖在同一個 col 內，按鈕的中心軸將 100% 對齊上方線條的中心軸)
+                # 渲染按鈕
                 label = station_labels[i] if i < len(station_labels) else f"🔽 工作站 {STATION_DATA[i]['id']}"
                 if st.button(label, key=f"n_btn_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
                     st.session_state.selected_node_idx = None if st.session_state.selected_node_idx == i else i
