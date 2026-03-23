@@ -373,7 +373,7 @@ with tab_dashboard:
                 if is_first:
                     # 第一欄：外掛 Input 與連接箭頭，且 n0 裡面不放字
                     html += '<div style="position: absolute; right: 100%; display: flex; align-items: center;"><span style="margin-right: 8px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Input</span><div style="width: 30px; height: 2px; background: #ccc; position: relative; margin-right: 5px;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div></div>'
-                    html += f'<div class="topo-node {prev_n_class}"><div class="topo-node-content"></div></div></div>'
+                    html += '<div class="topo-node" style="background: #111111; border-color: #555; box-shadow: none;"><div class="topo-node-content"></div></div></div>'
                 else:
                     # 中間欄：n1~n4 裡面放字
                     html += f'<div class="topo-node {prev_n_class}"><div class="topo-node-content"><i>n</i><sub>{prev_node_id}</sub></div></div></div>'
@@ -383,7 +383,7 @@ with tab_dashboard:
                     html += f'<div style="position: absolute; left: calc(100% + 0.5rem); top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
                     
                     # 最後一顆圓圈 n5 不放字
-                    html += f'<div class="topo-node {n_class}"><div class="topo-node-content"></div></div>'
+                    html += '<div class="topo-node" style="background: #111111; border-color: #555; box-shadow: none;"><div class="topo-node-content"></div></div>'
                     
                     # 移除了 margin-left，讓 Output 線條直接無縫貼緊 n5 圓圈邊緣
                     html += '<div style="position: absolute; left: 100%; display: flex; align-items: center;"><div style="width: 30px; height: 2px; background: #ccc; position: relative;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div><span style="margin-left: 10px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Output</span></div>'
