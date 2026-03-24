@@ -58,10 +58,33 @@ div.stButton > button:not([kind="primary"]):hover { background-color: #72e89a !i
 .kpi-border-yellow { border-color: #ffd86b !important; }
 .kpi-border-red { border-color: #ff6b6b !important; }
 
+/* KPI 的方塊動畫維持不變 */
 @keyframes kpiPulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 216, 107, 0.7); } 50% { transform: scale(1.05); box-shadow: 0 0 20px 10px rgba(255, 216, 107, 0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 216, 107, 0); } }
 .kpi-pulse { animation: kpiPulse 1.5s infinite; z-index: 10; border-color: #ffd86b !important; }
 @keyframes kpiShake { 0% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,107,107,0); } 25% { transform: translateX(-5px) rotate(-1deg); box-shadow: 0 0 15px rgba(255,107,107,0.5); } 50% { transform: translateX(5px) rotate(1deg); box-shadow: 0 0 25px rgba(255,107,107,0.8); } 75% { transform: translateX(-5px) rotate(-1deg); box-shadow: 0 0 15px rgba(255,107,107,0.5); } 100% { transform: translateX(0); box-shadow: 0 0 0 rgba(255,107,107,0); } }
 .kpi-shake { animation: kpiShake 0.5s infinite; border-color: #ff6b6b !important; }
+
+/* ========================================= */
+/* 核心變更：線條專用的變色機制與安全動畫        */
+/* ========================================= */
+.line-green { background: #4cd37a !important; box-shadow: 0 0 8px rgba(76, 211, 122, 0.5); }
+.line-green .arrow-head { border-left-color: #4cd37a !important; }
+
+.line-yellow { background: #ffd86b !important; }
+.line-yellow .arrow-head { border-left-color: #ffd86b !important; }
+
+.line-red { background: #ff6b6b !important; }
+.line-red .arrow-head { border-left-color: #ff6b6b !important; }
+
+.line-fail { background: #8B0000 !important; }
+.line-fail .arrow-head { border-left-color: #8B0000 !important; }
+
+/* 專為線條設計的呼吸燈與閃爍動畫，避免使用 transform: translateX 導致線條斷裂 */
+@keyframes linePulse { 0% { box-shadow: 0 0 5px rgba(255, 216, 107, 0.4); } 50% { box-shadow: 0 0 20px rgba(255, 216, 107, 0.9); } 100% { box-shadow: 0 0 5px rgba(255, 216, 107, 0.4); } }
+.line-pulse { animation: linePulse 1.5s infinite; z-index: 5; }
+
+@keyframes lineBlink { 0% { opacity: 1; box-shadow: 0 0 10px rgba(255, 107, 107, 0.8); } 50% { opacity: 0.4; box-shadow: 0 0 2px rgba(255, 107, 107, 0.2); } 100% { opacity: 1; box-shadow: 0 0 10px rgba(255, 107, 107, 0.8); } }
+.line-blink { animation: lineBlink 0.6s infinite; z-index: 5; }
 
 /* 拓樸節點核心樣式 */
 .topo-node { 
@@ -74,11 +97,6 @@ div.stButton > button:not([kind="primary"]):hover { background-color: #72e89a !i
 .topo-node-content { display: inline-flex; align-items: baseline; justify-content: center; }
 .topo-node i { font-family: 'Times New Roman', serif; font-size: 1.6rem; font-weight: 700; font-style: italic; }
 .topo-node sub { font-size: 0.8rem; font-weight: 900; margin-left: 2px; }
-
-.node-green { background: linear-gradient(135deg, #4cd37a, #218838); box-shadow: 0 0 15px rgba(76, 211, 122, 0.4); }
-.node-yellow { background: linear-gradient(135deg, #ffd86b, #e0a800); box-shadow: 0 0 15px rgba(255, 216, 107, 0.4); }
-.node-red { background: linear-gradient(135deg, #ff6b6b, #c82333); box-shadow: 0 0 15px rgba(255, 107, 107, 0.6); }
-.node-fail { background: #8B0000 !important; animation: kpiShake 0.4s infinite !important; box-shadow: 0 0 30px rgba(255, 0, 0, 0.8) !important; z-index: 10; }
 
 /* 線上文字標籤 */
 .arc-label { 
@@ -307,27 +325,27 @@ with tab_dashboard:
 
             st.markdown('<div style="padding:15px; background-color: rgba(255, 255, 255, 0.05); border-radius: 8px; margin-top: 25px; border: 1px solid rgba(255,255,255,0.1);"><h4 style="margin-top:0; color:#e6eef6; font-size: 16px; border-bottom: 1px solid rgba(255,255,255,0.2); padding-bottom: 8px;">🚦 狀態燈號閾值說明</h4><div style="font-size: 0.9rem; color: #ddd; margin-top: 10px;"><div style="margin-bottom: 8px;"><b>系統可靠度 (<span style="font-family: \'Times New Roman\', serif; font-style: italic;">R<sub>d</sub></span>)</b></div><div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#4cd37a;">🟢 正常 (Green)</span> <span>＞ 0.95</span></div><div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#ffd86b;">🟡 警告 (Yellow)</span> <span>0.90 ~ 0.95</span></div><div style="display: flex; justify-content: space-between; margin-bottom: 16px;"><span style="color:#ff6b6b;">🔴 危險 (Red)</span> <span>＜ 0.90</span></div><div style="margin-bottom: 8px;"><b>總碳排放 (kg)</b></div><div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#4cd37a;">🟢 正常 (Green)</span> <span>0 ~ 70</span></div><div style="display: flex; justify-content: space-between; margin-bottom: 4px;"><span style="color:#ffd86b;">🟡 警告 (Yellow)</span> <span>71 ~ 100</span></div><div style="display: flex; justify-content: space-between;"><span style="color:#ff6b6b;">🔴 危險 (Red)</span> <span>＞ 100</span></div></div></div>', unsafe_allow_html=True)
 
+        # -----------------------------------------------------------------------------------
+        # 狀態邏輯切換：改由線條 (a_i) 接收狀態，圓圈 (n_i) 保持靜態
+        # -----------------------------------------------------------------------------------
         sys_reliability = res.get('reliability', 0)
         sys_carbon = res.get('carbon_emission', 0)
         sys_status = "green" if sys_reliability > 0.95 else "yellow" if sys_reliability >= 0.9 else "red"
+        
+        # 針對下方的 KPI 卡片還是保留原本的動畫
         sys_anim = "kpi-pulse" if sys_status == "yellow" else "kpi-shake" if sys_status == "red" else ""
+        
+        # 針對線條使用專屬的安全動畫 (不會斷離)
+        sys_anim_line = "line-pulse" if sys_status == "yellow" else "line-blink" if sys_status == "red" else ""
 
-        node_states = []
+        line_states = []
         for i, station in enumerate(STATION_DATA):
             is_failed = res["rounded_inputs"][i] > (max(station["capacities"]) if station["capacities"] else 0)
-            node_states.append("node-fail" if is_failed else f"node-{sys_status} {sys_anim}")
+            line_states.append("line-fail line-blink" if is_failed else f"line-{sys_status} {sys_anim_line}")
 
         st.markdown("### 🕸️ 生產線即時拓樸監控")
         if "selected_node_idx" not in st.session_state: st.session_state.selected_node_idx = None
         station_labels = ["🔽 吹瓶站", "🔽 充填站", "🔽 套標站", "🔽 包裝站", "🔽 疊棧站"]
-
-        # -----------------------------------------------------------------------------------
-        # 終極排版對齊：
-        # - n0 裡面空白
-        # - n1 ~ n4 裡面有字
-        # - n5 裡面空白
-        # - Output 線條無縫貼緊 n5 圓圈！
-        # -----------------------------------------------------------------------------------
         
         btn_cols = st.columns(FIXED_N)
         for i, col in enumerate(btn_cols):
@@ -335,64 +353,51 @@ with tab_dashboard:
                 is_first = (i == 0)
                 is_last = (i == FIXED_N - 1)
                 
-                # 計算線段在欄位中的偏移與長度
                 if FIXED_N == 1:
-                    line_left = "0"
-                    line_width = "100%"
-                    node_left_pos = "0"
+                    line_left, line_width, node_left_pos = "0", "100%", "0"
                 else:
                     if is_first:
-                        line_left = "0"
-                        line_width = "calc(100% + 0.5rem)"
-                        node_left_pos = "0"
+                        line_left, line_width, node_left_pos = "0", "calc(100% + 0.5rem)", "0"
                     elif is_last:
-                        line_left = "-0.5rem"
-                        line_width = "calc(100% + 0.5rem)"
-                        node_left_pos = "-0.5rem"
+                        line_left, line_width, node_left_pos = "-0.5rem", "calc(100% + 0.5rem)", "-0.5rem"
                     else:
-                        line_left = "-0.5rem"
-                        line_width = "calc(100% + 1rem)"
-                        node_left_pos = "-0.5rem"
+                        line_left, line_width, node_left_pos = "-0.5rem", "calc(100% + 1rem)", "-0.5rem"
                 
-                n_class = node_states[i]
-                prev_n_class = "node-green" if is_first else node_states[i-1]
                 node_id = STATION_DATA[i]["id"]
                 prev_node_id = "0" if is_first else STATION_DATA[i-1]["id"]
                 
+                # 取得這段線的狀態
+                l_class = line_states[i]
+                
                 html = '<div style="position: relative; width: 100%; height: 100px; display: flex; justify-content: center; align-items: center; z-index: 0;">'
                 
-                # 1. 畫連接線 a_i
-                html += f'<div style="position: absolute; left: {line_left}; width: {line_width}; height: 2px; background: #ccc; top: 50%; transform: translateY(-50%); z-index: 1;"><div style="position: absolute; right: 28px; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div>'
+                # 1. 畫連接線 a_i (現在線條會套用 l_class 變色)
+                html += f'<div class="{l_class}" style="position: absolute; left: {line_left}; width: {line_width}; height: 3px; background: #ccc; top: 50%; transform: translateY(-50%); z-index: 1;"><div class="arrow-head" style="position: absolute; right: 28px; top: -4.5px; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 10px solid #ccc;"></div></div>'
                 
                 # 2. 畫弧線標籤 a_i
-                html += f'<div class="arc-label" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 3;"><i>a</i><sub>{node_id}</sub></div>'
+                html += f'<div class="arc-label" style="position: absolute; top: 15px; left: calc(50% + 0.5rem); transform: translateX(-50%); z-index: 3;"><i>a</i><sub>{node_id}</sub></div>'
                 
                 # 3. 畫左側的圓圈 n_{i-1}
                 html += f'<div style="position: absolute; left: {node_left_pos}; top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
                 
                 if is_first:
-                    # 第一欄：外掛 Input 與連接箭頭，且 n0 裡面不放字
+                    # 第一欄：外掛 Input 與小箭頭，且 n0 黑色無字
                     html += '<div style="position: absolute; right: 100%; display: flex; align-items: center;"><span style="margin-right: 8px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Input</span><div style="width: 30px; height: 2px; background: #ccc; position: relative; margin-right: 5px;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div></div>'
                     html += '<div class="topo-node" style="background: #111111; border-color: #555; box-shadow: none;"><div class="topo-node-content"></div></div></div>'
                 else:
-                    # 中間欄：n1~n4 裡面放字
-                    html += f'<div class="topo-node {prev_n_class}"><div class="topo-node-content"><i>n</i><sub>{prev_node_id}</sub></div></div></div>'
+                    # 中間欄：n1~n4 統一設定為靜態深藍色，不再變色
+                    html += f'<div class="topo-node" style="background: #23395B; border-color: rgba(255,255,255,0.4); box-shadow: 0 4px 10px rgba(0,0,0,0.5);"><div class="topo-node-content"><i>n</i><sub>{prev_node_id}</sub></div></div></div>'
                 
                 # 4. 如果是最後一欄，補畫右側最後一個圓圈 n_N，以及 Output 標籤
                 if is_last:
                     html += f'<div style="position: absolute; left: calc(100% + 0.5rem); top: 50%; transform: translate(-50%, -50%); z-index: 4; display: flex; align-items: center;">'
                     
-                    # 最後一顆圓圈 n5 不放字
+                    # 最後一欄：n5 黑色無字
                     html += '<div class="topo-node" style="background: #111111; border-color: #555; box-shadow: none;"><div class="topo-node-content"></div></div>'
-                    
-                    # 移除了 margin-left，讓 Output 線條直接無縫貼緊 n5 圓圈邊緣
                     html += '<div style="position: absolute; left: 100%; display: flex; align-items: center;"><div style="width: 30px; height: 2px; background: #ccc; position: relative;"><div style="position: absolute; right: 0; top: -4px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 8px solid #ccc;"></div></div><span style="margin-left: 10px; color: #fff; font-weight: 700; font-size: 16px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);">Output</span></div>'
-                    
                     html += '</div>'
                     
                 html += '</div>'
-                
-                # 渲染拓樸圖
                 st.markdown(html, unsafe_allow_html=True)
                 
                 # 渲染按鈕
@@ -400,8 +405,6 @@ with tab_dashboard:
                 if st.button(label, key=f"n_btn_{i}", type="primary" if st.session_state.selected_node_idx == i else "secondary", use_container_width=True):
                     st.session_state.selected_node_idx = None if st.session_state.selected_node_idx == i else i
                     st.rerun()
-
-        # -----------------------------------------------------------------------------------
 
         if st.session_state.selected_node_idx is not None:
             idx = st.session_state.selected_node_idx
