@@ -96,7 +96,7 @@ div.stButton > button:not([kind="primary"]):hover { background-color: #72e89a !i
 }
 .topo-node-content { display: inline-flex; align-items: baseline; justify-content: center; }
 .topo-node i { font-family: 'Times New Roman', serif; font-size: 1.6rem; font-weight: 700; font-style: italic; }
-.topo-node sub { font-size: 0.8rem; font-weight: 900; margin-left: 2px; }
+.topo-node sub { font-size: 0.7rem; font-weight: 900; margin-left: 2px; }
 
 /* 線上文字標籤 */
 .arc-label { 
@@ -422,7 +422,7 @@ with tab_dashboard:
         k1, k2, k3, k4, k5 = st.columns([1,1,1,1,1], gap="large")
         with k1: st.markdown(f'<div class="kpi-box kpi-border-{sys_status} {sys_anim}"><div class="kpi-label">系統可靠度 (<span style="font-family: \'Times New Roman\', serif; font-style: italic;">R<sub>d</sub></span>)</div><div class="kpi-value">{res.get("reliability",0):.4f}</div></div>', unsafe_allow_html=True)
         with k2: st.markdown(f'<div class="kpi-box"><div class="kpi-label">輸出量 (𝑑)</div><div class="kpi-value">{demand}</div></div>', unsafe_allow_html=True)
-        with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">動態總功率 (<span style="font-family: \'Times New Roman\', serif;">kW</span>)</div><div class="kpi-value">{res.get("total_energy",0):.3f}</div></div>', unsafe_allow_html=True)
+        with k3: st.markdown(f'<div class="kpi-box"><div class="kpi-label">動態總功率 (kW)</div><div class="kpi-value">{res.get("total_energy",0):.3f}</div></div>', unsafe_allow_html=True)
         
         c_color = "green" if sys_carbon <= 70 else "yellow" if sys_carbon <= 100 else "red"
         
