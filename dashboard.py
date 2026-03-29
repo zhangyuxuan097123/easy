@@ -26,58 +26,6 @@ st.set_page_config(
 DEFAULT_EXCEL_PATH = "!!!最新版簡單!!!.xlsx"
 
 # ============================================================
-# 🛠️  維修知識庫 (RAG 知識來源)
-#     格式：JSON，供 AI System Prompt 直接引用
-# ============================================================
-MAINTENANCE_KB = {
-    "stations": {
-        "吹瓶站": {
-            "description": "負責將 PET 預型品吹製成瓶身，設備包含吹瓶機、模具組",
-            "common_faults": ["模具磨損導致瓶身變形", "加熱管老化", "氣壓不穩"],
-            "repair_costs": {"模具更換": 45000, "加熱管更換": 8000, "氣壓閥維修": 3500},
-            "downtime_hours": {"模具更換": 8, "加熱管更換": 2, "氣壓閥維修": 1},
-            "preventive_interval_days": 90
-        },
-        "充填站": {
-            "description": "負責液體充填，含充填閥、計量裝置",
-            "common_faults": ["充填閥洩漏", "計量誤差", "封口不良"],
-            "repair_costs": {"充填閥更換": 12000, "計量器校正": 2000, "封口機維修": 6000},
-            "downtime_hours": {"充填閥更換": 3, "計量器校正": 1, "封口機維修": 4},
-            "preventive_interval_days": 60
-        },
-        "套標站": {
-            "description": "負責在瓶身套上收縮標籤",
-            "common_faults": ["標籤歪斜", "熱縮爐溫度不均", "輸送帶卡料"],
-            "repair_costs": {"熱縮爐維修": 15000, "輸送帶更換": 5000, "感測器校正": 1500},
-            "downtime_hours": {"熱縮爐維修": 6, "輸送帶更換": 2, "感測器校正": 0.5},
-            "preventive_interval_days": 45
-        },
-        "包裝站": {
-            "description": "負責裝箱、封箱作業",
-            "common_faults": ["封箱不良", "機械手臂卡頓", "光電感測器故障"],
-            "repair_costs": {"封箱機維修": 8000, "機械手臂大修": 35000, "感測器更換": 2500},
-            "downtime_hours": {"封箱機維修": 2, "機械手臂大修": 16, "感測器更換": 1},
-            "preventive_interval_days": 30
-        },
-        "疊棧站": {
-            "description": "負責棧板疊放與纏繞",
-            "common_faults": ["疊棧臂位移", "纏繞膜卡料", "棧板辨識錯誤"],
-            "repair_costs": {"疊棧臂校正": 5000, "纏繞機維修": 7000, "視覺系統校正": 3000},
-            "downtime_hours": {"疊棧臂校正": 2, "纏繞機維修": 3, "視覺系統校正": 1},
-            "preventive_interval_days": 60
-        }
-    },
-    "thresholds": {
-        "reliability_green": 0.95,
-        "reliability_yellow": 0.90,
-        "carbon_green_kg": 70,
-        "carbon_yellow_kg": 100
-    },
-    "cost_per_hour_downtime": 8000,
-    "currency": "NTD"
-}
-
-# ============================================================
 # --- 1. 全局 CSS ---
 # ============================================================
 st.markdown("""
@@ -188,16 +136,6 @@ div.stButton > button:not([kind="primary"]):hover { background-color: #72e89a !i
 }
 @keyframes typingPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
 
-.kb-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 10px;
-    padding: 12px 16px;
-    margin-bottom: 10px;
-}
-.kb-card-title { color: #f3a21a; font-weight: 700; font-size: 1rem; margin-bottom: 6px; }
-.kb-tag { display: inline-block; background: rgba(63,230,255,0.15); color: #3fe6ff; border-radius: 6px; padding: 2px 8px; font-size: 0.8rem; margin: 2px; }
-
 [data-testid="stPlotlyChart"] { background-color: #ffffff !important; border-radius: 18px; box-shadow: 0 8px 24px rgba(0,0,0,0.20); padding: 10px; margin-bottom: 20px; }
 .success-modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; backdrop-filter: blur(4px); animation: fadeOutContainer 2.5s forwards; z-index: 999999; }
 .success-modal-content { background: rgba(20, 24, 30, 0.95); border: 2px solid #4cd37a; border-radius: 16px; padding: 40px 60px; text-align: center; box-shadow: 0 0 40px rgba(76, 211, 122, 0.4); }
@@ -213,7 +151,6 @@ if "show_success_modal" not in st.session_state:
     st.session_state.show_success_modal = False
 if "ai_advice" not in st.session_state:
     st.session_state.ai_advice = None
-# 🆕 對話歷史紀錄
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
@@ -367,48 +304,58 @@ def calculate_metrics(demand, carbon_factor, _station_data, tb_value):
     }
 
 # ============================================================
-# 🤖  AI 函式：含 RAG 系統提示 + 智慧型重試
+# 🤖  AI 函式：單次 API 呼叫（參數抽取 + 建議生成合併）
 # ============================================================
-def build_system_prompt(current_metrics: dict, current_params: dict) -> str:
-    """組建含維修知識庫的 System Prompt"""
-    kb_json = json.dumps(MAINTENANCE_KB, ensure_ascii=False, indent=2)
-    return f"""你是一位台灣智慧工廠的 AI 廠長助理，專精於飲料瓶生產線管理。
-你的任務是根據使用者的自然語言問題，結合系統數據與維修知識庫，提供專業的決策建議。
+def build_combined_prompt(query: str, current_params: dict, current_metrics: dict, chat_history: list) -> str:
+    """組建單次呼叫的完整提示詞：同時抽取參數並生成回覆"""
+    history_text = ""
+    for turn in chat_history[-6:]:
+        history_text += f"使用者：{turn['user']}\nAI 戰情助理：{turn['ai']}\n"
+
+    return f"""你是台灣智慧工廠的 AI 戰情助理，專精於飲料瓶生產線管理。
 
 【語言規定】
 - 必須使用繁體中文（zh-TW），絕對不能出現簡體字。
 - 語氣：專業、直接、有建設性，避免過度客套。
+- 名稱：請一律自稱「AI 戰情助理」。
 
 【當前系統狀態】
-- 輸出量 (d)：{current_params.get('d', 'N/A')}
-- 瓶胚厚度參數 (tb)：{current_params.get('tb', 'N/A')}
-- CO₂ 係數：{current_params.get('cf', 'N/A')}
-- 系統可靠度 (Rd)：{current_metrics.get('reliability', 0):.4f}
-- 總碳排放：{current_metrics.get('carbon_emission', 0):.2f} kg
+- 輸出量 (𝑑)：{current_params.get('d', 'N/A')}
+- 瓶胚厚度參數 (𝑡ᵦ)：{current_params.get('tb', 'N/A')}
+- CO₂ 係數 (kg/kWh)：{current_params.get('cf', 'N/A')}
+- 系統可靠度 (𝑅ᵈ)：{current_metrics.get('reliability', 0):.4f}
+- 總碳排放 (kg)：{current_metrics.get('carbon_emission', 0):.2f}
 - 總耗損：{current_metrics.get('total_loss', 0):.2f}
 - 各站耗損：{dict(zip(['吹瓶站','充填站','套標站','包裝站','疊棧站'], [round(x,2) for x in current_metrics.get('losses', [])]))}
 - 各站動態功率 (kW)：{dict(zip(['吹瓶站','充填站','套標站','包裝站','疊棧站'], [round(x,2) for x in current_metrics.get('energies', [])]))}
 
 【可靠度警戒閾值】
-- 🟢 正常：> 0.95
-- 🟡 警告：0.90 ~ 0.95
-- 🔴 危險：< 0.90
+- 🟢 正常：𝑅ᵈ > 0.95
+- 🟡 警告：0.90 ≤ 𝑅ᵈ ≤ 0.95
+- 🔴 危險：𝑅ᵈ < 0.90
 
 【碳排放警戒閾值】
 - 🟢 正常：≤ 70 kg
 - 🟡 警告：71 ~ 100 kg
 - 🔴 危險：> 100 kg
 
-【維修知識庫 (RAG)】
-{kb_json}
+【對話歷史（近期）】
+{history_text if history_text else "（目前為對話開始）"}
 
-【回答規則】
-1. 若使用者描述情境參數（如厚度、產量、碳排係數），先提取並說明模擬結果。
-2. 若可靠度或碳排超標，從知識庫中找出最高耗損工作站，推薦 CP 值最高的維修方案（考量維修費用 + 停機成本）。
-3. 若涉及維修成本，以 NTD 為單位，說明維修費用、預估停機時數與停機損失。
-4. 回答長度：50～120 字為佳，重點清晰。
-5. 若使用者只是打招呼或問一般問題，友善回應即可，不需強行套入數據。
-"""
+【使用者最新訊息】
+{query}
+
+【任務】
+請完成以下兩件事，並嚴格以純 JSON 格式輸出，不含任何 Markdown 標籤或說明文字：
+1. 從使用者訊息中提取參數（若未提及則設為 null）：
+   - "d"：輸出量、產能、產量、需求量（整數）
+   - "tb"：瓶胚厚度、厚度參數（浮點數）
+   - "cf"：CO₂ 係數、碳排係數（浮點數）
+2. 生成專業回覆（50～120 字）存入 "reply" 欄位。
+
+輸出格式範例：
+{{"d": null, "tb": 0.9, "cf": null, "reply": "根據模擬結果..."}}"""
+
 
 def call_gemini_with_retry(model, prompt, max_retries=3):
     import re
@@ -428,57 +375,35 @@ def call_gemini_with_retry(model, prompt, max_retries=3):
             else:
                 raise e
 
-def extract_params_from_query(model, query: str, fallback: dict) -> dict:
-    """Step 1：用 AI 抽取參數"""
-    prompt = f"""你是精準的數據萃取系統。從輸入中提取以下三個變數，嚴格輸出純 JSON。
-變數定義：
-1. "d" (整數)：輸出量、產能、產量、需求量、訂單量
-2. "tb" (浮點數)：瓶胚厚度、厚度參數
-3. "cf" (浮點數)：碳排係數、CO2、排碳係數
-規則：未提及的變數值必須為 null。只輸出 JSON，不含 Markdown 標籤。
-輸入：{query}
-輸出："""
+
+def call_ai_single(model, query: str, current_params: dict, current_metrics: dict, chat_history: list):
+    """單次 API 呼叫：同時完成參數抽取與回覆生成，回傳 (extracted_params, reply_text)"""
+    prompt = build_combined_prompt(query, current_params, current_metrics, chat_history)
     resp = call_gemini_with_retry(model, prompt)
-    clean = resp.text.strip().replace("```json", "").replace("```", "")
+    raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
     try:
-        data = json.loads(clean)
-        return {
-            "d": int(data["d"]) if data.get("d") is not None else fallback.get("d"),
-            "tb": float(data["tb"]) if data.get("tb") is not None else fallback.get("tb"),
-            "cf": float(data["cf"]) if data.get("cf") is not None else fallback.get("cf"),
+        data = json.loads(raw)
+        extracted = {
+            "d": int(data["d"]) if data.get("d") is not None else current_params.get("d"),
+            "tb": float(data["tb"]) if data.get("tb") is not None else current_params.get("tb"),
+            "cf": float(data["cf"]) if data.get("cf") is not None else current_params.get("cf"),
         }
-    except:
-        return fallback
+        reply = data.get("reply", "（AI 戰情助理無法解析回覆，請重試。）")
+        return extracted, reply
+    except Exception:
+        # JSON 解析失敗時，視整個回覆為文字回答，參數維持原值
+        return current_params.copy(), raw if raw else "（AI 戰情助理無法解析回覆，請重試。）"
 
-def generate_ai_reply(model, system_prompt: str, chat_history: list, user_query: str) -> str:
-    """Step 2：生成 AI 對話回應"""
-    # 組建多輪對話上下文
-    history_text = ""
-    for turn in chat_history[-6:]:  # 最近 3 輪對話
-        history_text += f"使用者：{turn['user']}\nAI：{turn['ai']}\n"
-    
-    full_prompt = f"""{system_prompt}
-
-【對話歷史（近期）】
-{history_text if history_text else "（目前為對話開始）"}
-
-【使用者最新訊息】
-{user_query}
-
-請回覆："""
-    resp = call_gemini_with_retry(model, full_prompt)
-    return resp.text.strip()
 
 # ============================================================
 # --- 4. UI 顯示 ---
 # ============================================================
 st.markdown('<div style="padding:14px 10px; border-radius:10px; background: linear-gradient(90deg, rgba(6,21,39,0.6), rgba(8,30,46,0.35)); box-shadow:0 6px 18px rgba(2,8,23,0.6); margin-bottom:12px;"><h1 style="margin:0;color:#e6f7ff">🏭 基於生成式AI與網路可靠度於製造系統戰情儀表設計</h1></div>', unsafe_allow_html=True)
 
-tab_dashboard, tab_chat, tab_editor, tab_kb = st.tabs([
+tab_dashboard, tab_chat, tab_editor = st.tabs([
     "📊 戰情儀表板",
     "🤖 AI 戰情助理",
     "📝 資料管理",
-    "📚 維修知識庫"
 ])
 
 if st.session_state.force_tab_index is not None:
@@ -638,11 +563,11 @@ with tab_dashboard:
         st.dataframe(df_res, use_container_width=True)
 
 # ============================================================
-# TAB 2: 🆕 AI 戰情助理（完整對話介面）
+# TAB 2: AI 戰情助理（完整對話介面）
 # ============================================================
 with tab_chat:
     st.markdown("## 🤖 AI 戰情助理")
-    st.markdown('<p style="color: #aac4d8; margin-top: -10px; margin-bottom: 20px;">支援自然語言情境模擬、參數自動提取、維修成本分析與多輪對話</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #aac4d8; margin-top: -10px; margin-bottom: 20px;">支援自然語言情境模擬、參數自動提取、多輪對話，單次 API 呼叫高效回應</p>', unsafe_allow_html=True)
 
     col_key, col_clear = st.columns([3, 1])
     with col_key:
@@ -664,7 +589,7 @@ with tab_chat:
     quick_questions = [
         "目前系統狀態如何？",
         "瓶胚厚度改成0.9，可靠度還達標嗎？",
-        "哪個工作站最需要優先維修？",
+        "哪個工作站耗損最高？",
         "產量增加到18000，碳排會超標嗎？"
     ]
     for i, (col, qq) in enumerate(zip(q_cols, quick_questions)):
@@ -675,7 +600,7 @@ with tab_chat:
 
     st.markdown("---")
 
-    # ── 對話紀錄顯示 ──
+    # ── 工作站資料 ──
     try:
         source_df_chat = st.session_state.df_data
         STATION_DATA_CHAT = [{
@@ -687,28 +612,28 @@ with tab_chat:
     except:
         STATION_DATA_CHAT = []
 
-    # 顯示歡迎訊息（對話為空時）
+    # ── 歡迎訊息（對話為空時）──
     if not st.session_state.chat_history:
         st.markdown("""
         <div style="background: rgba(63,230,255,0.05); border: 1px solid rgba(63,230,255,0.2); border-radius: 12px; padding: 20px; margin-bottom: 16px;">
-            <div style="color: #3fe6ff; font-weight: 700; font-size: 1.1rem; margin-bottom: 10px;">👋 哈囉！我是您的 AI 廠長助理</div>
+            <div style="color: #3fe6ff; font-weight: 700; font-size: 1.1rem; margin-bottom: 10px;">👋 哈囉！我是您的 AI 戰情助理</div>
             <p style="color: #c0dff0; margin: 0; line-height: 1.7;">
             我可以幫您：<br>
-            🔍 <b>模擬分析</b>：輸入「如果產量改成15000，系統可靠嗎？」<br>
-            🛠️ <b>維修建議</b>：輸入「哪個站需要優先維修？費用多少？」<br>
-            📊 <b>狀態診斷</b>：輸入「目前碳排情況如何？」<br>
-            ⚙️ <b>參數調整</b>：輸入「厚度改0.85，碳排係數0.5，結果如何？」
+            🔍 <b>模擬分析</b>：輸入「如果產量 (<i>d</i>) 改成 15000，系統可靠嗎？」<br>
+            📊 <b>狀態診斷</b>：輸入「目前碳排 (CO₂ 係數) 情況如何？」<br>
+            ⚙️ <b>參數調整</b>：輸入「厚度參數 (<i>t</i><sub>b</sub>) 改 0.85，CO₂ 係數 0.5，結果如何？」<br>
+            📉 <b>可靠度查詢</b>：輸入「目前系統可靠度 (<i>R</i><sub>d</sub>) 是否達標？」
             </p>
         </div>
         """, unsafe_allow_html=True)
     else:
-        # 渲染歷史對話
+        # ── 渲染歷史對話 ──
         chat_html = '<div class="chat-container">'
         for turn in st.session_state.chat_history:
             ts = turn.get("time", "")
             chat_html += f'<div class="chat-label-user">{ts} 您</div>'
             chat_html += f'<div class="chat-bubble-user">{turn["user"]}</div>'
-            chat_html += f'<div class="chat-label-ai">🤖 AI 廠長</div>'
+            chat_html += f'<div class="chat-label-ai">🤖 AI 戰情助理</div>'
             chat_html += f'<div class="chat-bubble-ai">{turn["ai"]}</div>'
             # 若有模擬數據摘要，顯示在回覆下方
             if turn.get("sim_summary"):
@@ -716,10 +641,12 @@ with tab_chat:
                 rd_color = "#4cd37a" if s["rd"] > 0.95 else "#ffd86b" if s["rd"] >= 0.9 else "#ff6b6b"
                 cb_color = "#4cd37a" if s["carbon"] <= 70 else "#ffd86b" if s["carbon"] <= 100 else "#ff6b6b"
                 chat_html += f'''<div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; margin: 4px 60px 8px 0; font-size: 0.85rem; color: #aac4d8;">
-                    📊 <b style="color:#f3a21a">模擬摘要</b>　
-                    d={s["d"]}　tb={s["tb"]}　CF={s["cf"]}　
-                    <span style="color:{rd_color}">Rd={s["rd"]:.4f}</span>　
-                    <span style="color:{cb_color}">碳排={s["carbon"]:.1f}kg</span>
+                    📊 <b style="color:#f3a21a">模擬摘要</b>&nbsp;&nbsp;
+                    <i>d</i>={s["d"]}&nbsp;&nbsp;
+                    <i>t</i><sub>b</sub>={s["tb"]}&nbsp;&nbsp;
+                    CO₂ 係數={s["cf"]}&nbsp;&nbsp;
+                    <span style="color:{rd_color}"><i>R</i><sub>d</sub>={s["rd"]:.4f}</span>&nbsp;&nbsp;
+                    <span style="color:{cb_color}">碳排={s["carbon"]:.1f} kg</span>
                 </div>'''
         chat_html += '</div>'
         st.markdown(chat_html, unsafe_allow_html=True)
@@ -728,7 +655,7 @@ with tab_chat:
     pending_q = st.session_state.pop("pending_quick_q", None)
 
     # ── 對話輸入框 ──
-    user_input = st.chat_input("💬 請輸入您的問題（例：如果厚度改成0.9，系統還安全嗎？）")
+    user_input = st.chat_input("💬 請輸入您的問題（例：如果厚度參數改成 0.9，系統可靠度 (Rd) 還安全嗎？）")
 
     # 合併快速提問或手動輸入
     final_query = pending_q or user_input
@@ -739,7 +666,7 @@ with tab_chat:
         elif not STATION_DATA_CHAT:
             st.error("⚠️ 無有效工作站資料，請先在「資料管理」頁面設定。")
         else:
-            with st.spinner("🤖 AI 分析中..."):
+            with st.spinner("🤖 AI 戰情助理分析中..."):
                 try:
                     genai.configure(api_key=api_key_chat)
                     available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
@@ -748,34 +675,42 @@ with tab_chat:
                         st.stop()
                     model_chat = genai.GenerativeModel(available_models[0])
 
-                    # Step 1：抽取參數
-                    current_params_fallback = {
+                    # 當前參數
+                    current_params = {
                         "d": st.session_state.sim_d,
                         "tb": st.session_state.sim_tb,
                         "cf": st.session_state.sim_cf
                     }
-                    extracted = extract_params_from_query(model_chat, final_query, current_params_fallback)
 
-                    # Step 2：用抽取到的參數計算指標
-                    sim_res = calculate_metrics(
-                        extracted["d"], extracted["cf"], STATION_DATA_CHAT, extracted["tb"]
+                    # 以當前參數計算指標（供 AI 參考）
+                    current_metrics = calculate_metrics(
+                        current_params["d"], current_params["cf"],
+                        STATION_DATA_CHAT, current_params["tb"]
                     )
 
-                    # Step 3：組建 System Prompt（含 RAG 知識庫 + 當前系統狀態）
-                    system_prompt = build_system_prompt(sim_res, extracted)
-
-                    # Step 4：生成 AI 回覆
-                    ai_reply = generate_ai_reply(
-                        model_chat, system_prompt,
-                        st.session_state.chat_history, final_query
+                    # 單次 API 呼叫：同時抽取參數 + 生成回覆
+                    extracted, ai_reply = call_ai_single(
+                        model_chat, final_query,
+                        current_params, current_metrics,
+                        st.session_state.chat_history
                     )
 
-                    # Step 5：儲存對話紀錄
+                    # 若參數有變化，重新計算模擬指標
                     sim_changed = (
-                        extracted["d"] != current_params_fallback["d"] or
-                        abs(extracted["tb"] - current_params_fallback["tb"]) > 0.001 or
-                        abs(extracted["cf"] - current_params_fallback["cf"]) > 0.001
+                        extracted["d"] != current_params["d"] or
+                        abs(extracted["tb"] - current_params["tb"]) > 0.001 or
+                        abs(extracted["cf"] - current_params["cf"]) > 0.001
                     )
+
+                    if sim_changed:
+                        sim_res = calculate_metrics(
+                            extracted["d"], extracted["cf"],
+                            STATION_DATA_CHAT, extracted["tb"]
+                        )
+                    else:
+                        sim_res = current_metrics
+
+                    # 儲存對話紀錄
                     st.session_state.chat_history.append({
                         "user": final_query,
                         "ai": ai_reply,
@@ -790,7 +725,7 @@ with tab_chat:
                     # 若 AI 建議更新參數，寫入中轉站
                     if sim_changed:
                         st.session_state.pending_ai_updates = extracted
-                        st.toast("✅ 參數已由 AI 自動更新，儀表板同步刷新", icon="🔄")
+                        st.toast("✅ 參數已由 AI 戰情助理自動更新，儀表板同步刷新", icon="🔄")
 
                     st.rerun()
 
@@ -881,63 +816,4 @@ with tab_editor:
                 st.rerun()
             except Exception as e:
                 st.error(f"儲存失敗: {e}")
-
-# ============================================================
-# TAB 4: 🆕 維修知識庫
-# ============================================================
-with tab_kb:
-    st.markdown("## 📚 維修知識庫")
-    st.markdown('<p style="color: #aac4d8; margin-top: -10px;">AI 助理的知識來源，您可依實際情況更新各工作站的維修費用與週期</p>', unsafe_allow_html=True)
-
-    st.info("💡 以下資料為 AI 助理的 RAG 知識庫內容，AI 在給出維修建議時會參考這些資料。如需修改，請直接編輯程式碼中的 `MAINTENANCE_KB` 字典。", icon="ℹ️")
-
-    col_kb1, col_kb2 = st.columns(2)
-    station_names_kb = list(MAINTENANCE_KB["stations"].keys())
-
-    for idx, st_name in enumerate(station_names_kb):
-        col = col_kb1 if idx % 2 == 0 else col_kb2
-        info = MAINTENANCE_KB["stations"][st_name]
-        with col:
-            st.markdown(f"""
-            <div class="kb-card">
-                <div class="kb-card-title">🏭 {st_name}</div>
-                <div style="color: #c0dff0; font-size: 0.88rem; margin-bottom: 8px;">{info['description']}</div>
-                <div style="margin-bottom: 6px;">
-                    <span style="color: #f3a21a; font-size: 0.82rem; font-weight: 600;">常見故障：</span>
-                    {''.join([f'<span class="kb-tag">{f}</span>' for f in info['common_faults']])}
-                </div>
-                <div style="margin-bottom: 6px;">
-                    <span style="color: #f3a21a; font-size: 0.82rem; font-weight: 600;">維修費用 (NTD)：</span><br>
-                    {''.join([f'<div style="display:flex;justify-content:space-between;color:#ddd;font-size:0.83rem;padding:2px 0;"><span>{k}</span><span style="color:#4cd37a;font-weight:700;">NT$ {v:,}</span></div>' for k, v in info['repair_costs'].items()])}
-                </div>
-                <div>
-                    <span style="color: #f3a21a; font-size: 0.82rem; font-weight: 600;">預防保養週期：</span>
-                    <span style="color: #3fe6ff; font-weight: 700;">每 {info['preventive_interval_days']} 天</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-    st.divider()
-    st.markdown("### ⚙️ 全域參數")
-    col_g1, col_g2 = st.columns(2)
-    with col_g1:
-        st.markdown(f"""
-        <div class="kb-card">
-            <div class="kb-card-title">💰 停機損失成本</div>
-            <div style="font-size: 2rem; font-weight: 800; color: #ff6b6b;">NT$ {MAINTENANCE_KB['cost_per_hour_downtime']:,}</div>
-            <div style="color: #aac4d8; font-size: 0.85rem;">/ 停機小時</div>
-        </div>
-        """, unsafe_allow_html=True)
-    with col_g2:
-        st.markdown(f"""
-        <div class="kb-card">
-            <div class="kb-card-title">🚦 警戒閾值</div>
-            <div style="font-size: 0.88rem; color: #ddd; line-height: 1.8;">
-                可靠度綠燈：&gt; {MAINTENANCE_KB['thresholds']['reliability_green']}<br>
-                可靠度黃燈：≥ {MAINTENANCE_KB['thresholds']['reliability_yellow']}<br>
-                碳排綠燈：≤ {MAINTENANCE_KB['thresholds']['carbon_green_kg']} kg<br>
-                碳排黃燈：≤ {MAINTENANCE_KB['thresholds']['carbon_yellow_kg']} kg
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
 #在終端機輸入：python -m streamlit run "C:\Users\user\OneDrive\桌面\dashboard.py"
