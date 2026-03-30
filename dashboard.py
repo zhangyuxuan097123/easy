@@ -654,7 +654,7 @@ with tab_chat:
     pending_q = st.session_state.pop("pending_quick_q", None)
 
     # ── 對話輸入框 ──
-    user_input = st.chat_input("💬 請輸入您的問題（例：如果厚度參數 tb 改成 0.9，系統可靠度 Rd 還安全嗎？）")
+    user_input = st.chat_input("💬 請輸入您的問題（例：如果產量改成15000，系統可靠度還安全嗎？）")
 
     # 合併快速提問或手動輸入
     final_query = pending_q or user_input
