@@ -9,8 +9,9 @@ import io
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-import google.generativeai as genai
+from groq import Groq
 import json
+import html as html_lib
 
 # --- 輔助函式：產生 a 的斜體加下標字元 ---
 def get_a_subscript(val):
@@ -22,6 +23,14 @@ st.set_page_config(
     page_title="基於生成式AI與網路可靠度於製造系統戰情儀表設計",
     page_icon="🏭", layout="wide", initial_sidebar_state="expanded"
 )
+
+# ── 內建 Groq API Keys（可填入多組，系統自動輪替）──
+GROQ_API_KEYS = [
+    "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",   # 替換成你的第一組 Groq Key
+    "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",   # 替換成你的第二組 Groq Key
+    # 可繼續新增...
+]
+GROQ_MODEL = "llama-3.3-70b-versatile"  # 可改成 "gemma2-9b-it" 或 "mixtral-8x7b-32768"
 
 DEFAULT_EXCEL_PATH = "!!!最新版簡單!!!.xlsx"
 
@@ -90,7 +99,6 @@ div.stButton > button:not([kind="primary"]):hover { background-color: #72e89a !i
 
 .detail-card-highlight { border: 2px solid #3fe6ff; background: rgba(63, 230, 255, 0.1); padding: 15px; border-radius: 10px; margin-top: 10px; margin-bottom: 20px; }
 
-/* ── 聊天對話框樣式 ── */
 .chat-container {
     background: rgba(11, 22, 38, 0.95);
     border: 1.5px solid rgba(63, 230, 255, 0.35);
@@ -304,10 +312,9 @@ def calculate_metrics(demand, carbon_factor, _station_data, tb_value):
     }
 
 # ============================================================
-# 🤖  AI 函式：單次 API 呼叫（參數抽取 + 建議生成合併）
+# 🤖  AI 函式：使用 Groq API
 # ============================================================
 def build_combined_prompt(query: str, current_params: dict, current_metrics: dict, chat_history: list) -> str:
-    """組建單次呼叫的完整提示詞：同時抽取參數並生成回覆"""
     history_text = ""
     for turn in chat_history[-6:]:
         history_text += f"使用者：{turn['user']}\nAI 戰情助理：{turn['ai']}\n"
@@ -351,47 +358,57 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
    - "d"：輸出量、產能、產量、需求量（整數）
    - "tb"：瓶胚厚度、厚度參數（浮點數）
    - "cf"：CO₂ 係數、碳排係數（浮點數）
-2. 生成專業回覆（50～120 字）存入 "reply" 欄位。
+2. 生成專業回覆存入 "reply" 欄位（150～300 字），格式如下：
+   【現況分析】說明目前系統狀態與數值意義
+   【風險評估】指出潛在問題或警戒項目
+   【建議措施】給出 2～3 項具體可執行的改善建議
 
 輸出格式範例：
-{{"d": null, "tb": 0.9, "cf": null, "reply": "根據模擬結果..."}}"""
+{{"d": null, "tb": 0.9, "cf": null, "reply": "【現況分析】...【風險評估】...【建議措施】..."}}"""
 
 
-def call_gemini_with_retry(model, prompt, max_retries=3):
-    import re
-    for attempt in range(max_retries):
+def get_groq_client():
+    """輪替嘗試所有 API Key，回傳可用的 Groq client"""
+    last_err = None
+    for key in GROQ_API_KEYS:
         try:
-            return model.generate_content(prompt)
+            client = Groq(api_key=key)
+            # 以極小請求驗證 key 有效性
+            client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[{"role": "user", "content": "hi"}],
+                max_tokens=5
+            )
+            return client
         except Exception as e:
-            error_msg = str(e)
-            if "429" in error_msg or "Quota exceeded" in error_msg:
-                match = re.search(r'retry in (\d+\.?\d*)s', error_msg)
-                wait_time = float(match.group(1)) + 1 if match else 10 * (attempt + 1)
-                if attempt < max_retries - 1:
-                    st.toast(f"⏳ 觸發流量限制，冷卻 {wait_time:.0f} 秒...", icon="⏳")
-                    time.sleep(wait_time)
-                else:
-                    raise Exception("API 流量限制持續過長，請稍後再試。")
-            else:
-                raise e
+            last_err = e
+            continue
+    raise Exception(f"所有 Groq API Key 均無法使用。最後錯誤：{last_err}")
 
 
-def call_ai_single(model, query: str, current_params: dict, current_metrics: dict, chat_history: list):
-    """單次 API 呼叫：同時完成參數抽取與回覆生成，回傳 (extracted_params, reply_text)"""
+def call_ai_single(client, query: str, current_params: dict, current_metrics: dict, chat_history: list):
+    """單次 Groq API 呼叫：同時完成參數抽取與回覆生成"""
     prompt = build_combined_prompt(query, current_params, current_metrics, chat_history)
-    resp = call_gemini_with_retry(model, prompt)
-    raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
+
+    resp = client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=2048,
+        temperature=0.3,
+    )
+    raw = resp.choices[0].message.content.strip()
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
     try:
         data = json.loads(raw)
         extracted = {
-            "d": int(data["d"]) if data.get("d") is not None else current_params.get("d"),
+            "d":  int(data["d"])    if data.get("d")  is not None else current_params.get("d"),
             "tb": float(data["tb"]) if data.get("tb") is not None else current_params.get("tb"),
             "cf": float(data["cf"]) if data.get("cf") is not None else current_params.get("cf"),
         }
         reply = data.get("reply", "（AI 戰情助理無法解析回覆，請重試。）")
         return extracted, reply
     except Exception:
-        # JSON 解析失敗時，視整個回覆為文字回答，參數維持原值
         return current_params.copy(), raw if raw else "（AI 戰情助理無法解析回覆，請重試。）"
 
 
@@ -563,28 +580,115 @@ with tab_dashboard:
         st.dataframe(df_res, use_container_width=True)
 
 # ============================================================
-# TAB 2: AI 戰情助理（完整對話介面）
+# TAB 2: AI 戰情助理
 # ============================================================
 with tab_chat:
     st.markdown("## 🤖 AI 戰情助理")
-    st.markdown('<p style="color: #aac4d8; margin-top: -10px; margin-bottom: 20px;">支援自然語言情境模擬、參數自動提取、多輪對話，單次 API 呼叫高效回應</p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #aac4d8; margin-top: -10px; margin-bottom: 20px; font-size: 1.05rem;">支援自然語言情境模擬、參數自動提取、多輪對話</p>', unsafe_allow_html=True)
 
-    col_key, col_clear = st.columns([3, 1])
-    with col_key:
-        api_key_chat = st.text_input(
-            "🔑 Gemini API Key",
-            type="password",
-            placeholder="貼上您的 Google AI Studio API Key",
-            help="請至 https://aistudio.google.com 免費申請"
-        )
-    with col_clear:
-        st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+    try:
+        source_df_chat = st.session_state.df_data
+        STATION_DATA_CHAT = [{
+            "name": str(int(row['Station'])), "id": int(row['Station']),
+            "capacities": parse_list_from_string(row['capacities']),
+            "probs": parse_list_from_string(row['probs']), "p": row['p'],
+            "power": row['power'], "k": row.get('k', 1.0)
+        } for _, row in source_df_chat.iterrows()]
+    except:
+        STATION_DATA_CHAT = []
+
+    if not st.session_state.chat_history:
+        st.markdown("""
+        <div style="
+            background: linear-gradient(135deg, rgba(63,230,255,0.06), rgba(11,22,38,0.8));
+            border: 1.5px solid rgba(63,230,255,0.25);
+            border-radius: 16px;
+            padding: 28px 32px;
+            margin-bottom: 20px;
+        ">
+            <div style="color: #3fe6ff; font-weight: 700; font-size: 1.3rem; margin-bottom: 14px;">
+                👋 哈囉！我是您的 AI 戰情助理
+            </div>
+            <p style="color: #c8e6f5; margin: 0; line-height: 2; font-size: 1.05rem;">
+                我可以幫您：<br>
+                🔍 <b>模擬分析</b>：輸入「如果產量 (<i>d</i>) 改成 15000，系統可靠嗎？」<br>
+                📊 <b>狀態診斷</b>：輸入「目前碳排 (CO₂ 係數) 情況如何？」<br>
+                ⚙️ <b>參數調整</b>：輸入「厚度參數 (<i>t</i><sub>b</sub>) 改 0.85，CO₂ 係數 0.5，結果如何？」<br>
+                📉 <b>可靠度查詢</b>：輸入「目前系統可靠度 (<i>R</i><sub><i>d</i></sub>) 是否達標？」
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <style>
+        .chat-label-user { text-align:right; font-size:0.88rem; color:#7abadb; margin-bottom:4px; }
+        .chat-label-ai   { text-align:left;  font-size:0.88rem; color:#3fe6ff; margin-bottom:4px; }
+        .chat-bubble-user {
+            background: #ffffff;
+            border: 1.5px solid #d0d0d0;
+            border-radius:16px 16px 4px 16px; padding:13px 20px;
+            margin:0 0 8px 80px; color:#1a1a1a;
+            font-size:1.05rem; line-height:1.75; }
+        .chat-bubble-ai {
+    background: #0f2d3d;
+    border: 1.5px solid #1d9e75;
+    border-radius:16px 16px 16px 4px; padding:13px 20px;
+    margin:0 80px 6px 0; color:#9fe1cb;
+    font-size:1.05rem; line-height:1.85; }
+            box-shadow:0 2px 8px rgba(0,0,0,0.3); }
+        .sim-summary {
+            background:rgba(255,255,255,0.04);
+            border:1px solid rgba(255,255,255,0.12);
+            border-radius:10px; padding:10px 18px;
+            margin:2px 80px 18px 0;
+            font-size:0.92rem; color:#aac4d8; line-height:1.8; }
+        </style>
+        """, unsafe_allow_html=True)
+
+        for turn in st.session_state.chat_history:
+            safe_user = html_lib.escape(turn["user"])
+            safe_ai = html_lib.escape(turn["ai"]).replace("\n", "<br>")
+            safe_ai = safe_ai.replace("【現況分析】", "<br><b style='color:#3fe6ff'>【現況分析】</b>")
+            safe_ai = safe_ai.replace("【風險評估】", "<br><b style='color:#ffd86b'>【風險評估】</b>")
+            safe_ai = safe_ai.replace("【建議措施】", "<br><b style='color:#4cd37a'>【建議措施】</b>")
+
+            st.markdown(
+                f'<div class="chat-label-user">您</div>'
+                f'<div class="chat-bubble-user">{safe_user}</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                f'<div class="chat-label-ai">🤖 AI 戰情助理</div>'
+                f'<div class="chat-bubble-ai">{safe_ai}</div>',
+                unsafe_allow_html=True
+            )
+
+            if turn.get("sim_summary"):
+                s = turn["sim_summary"]
+                rd_color = "#4cd37a" if s["rd"] > 0.95 else "#ffd86b" if s["rd"] >= 0.9 else "#ff6b6b"
+                cb_color = "#4cd37a" if s["carbon"] <= 70 else "#ffd86b" if s["carbon"] <= 100 else "#ff6b6b"
+                st.markdown(f"""
+                <div class="sim-summary">
+                    📊 <b style="color:#f3a21a">模擬摘要</b>&nbsp;&nbsp;
+                    <i>d</i>={s["d"]}&nbsp;&nbsp;
+                    <i>t</i><sub>b</sub>={s["tb"]}&nbsp;&nbsp;
+                    CO₂ 係數={s["cf"]}&nbsp;&nbsp;
+                    <span style="color:{rd_color};font-weight:700;">
+                        <i>R</i><sub><i>d</i></sub>={s["rd"]:.4f}
+                    </span>&nbsp;&nbsp;
+                    <span style="color:{cb_color};font-weight:700;">
+                        總碳排放={s["carbon"]:.1f} kg
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+
+    col_clear_btn, _ = st.columns([1, 4])
+    with col_clear_btn:
         if st.button("🗑️ 清除對話", use_container_width=True):
             st.session_state.chat_history = []
             st.rerun()
 
-    # ── 快速提問按鈕 ──
-    st.markdown("**💡 快速提問：**")
+    st.markdown('<p style="color: #f3a21a; font-weight: 700; font-size: 1.05rem; margin-bottom: 10px;">💡 快速提問</p>', unsafe_allow_html=True)
     q_cols = st.columns(4)
     quick_questions = [
         "目前系統狀態如何？",
@@ -598,118 +702,46 @@ with tab_chat:
                 st.session_state["pending_quick_q"] = qq
                 st.rerun()
 
-    st.markdown("---")
+    st.markdown("<div style='margin-bottom: 6px;'></div>", unsafe_allow_html=True)
 
-    # ── 工作站資料 ──
-    try:
-        source_df_chat = st.session_state.df_data
-        STATION_DATA_CHAT = [{
-            "name": str(int(row['Station'])), "id": int(row['Station']),
-            "capacities": parse_list_from_string(row['capacities']),
-            "probs": parse_list_from_string(row['probs']), "p": row['p'],
-            "power": row['power'], "k": row.get('k', 1.0)
-        } for _, row in source_df_chat.iterrows()]
-    except:
-        STATION_DATA_CHAT = []
-
-    # ── 歡迎訊息（對話為空時）──
-    if not st.session_state.chat_history:
-        st.markdown("""
-        <div style="background: rgba(63,230,255,0.05); border: 1px solid rgba(63,230,255,0.2); border-radius: 12px; padding: 20px; margin-bottom: 16px;">
-            <div style="color: #3fe6ff; font-weight: 700; font-size: 1.1rem; margin-bottom: 10px;">👋 哈囉！我是您的 AI 戰情助理</div>
-            <p style="color: #c0dff0; margin: 0; line-height: 1.7;">
-            我可以幫您：<br>
-            🔍 <b>模擬分析</b>：輸入「如果產量 (<i>d</i>) 改成 15000，系統可靠嗎？」<br>
-            📊 <b>狀態診斷</b>：輸入「目前碳排 (CO₂ 係數) 情況如何？」<br>
-            ⚙️ <b>參數調整</b>：輸入「厚度參數 (<i>t</i><sub>b</sub>) 改 0.85，CO₂ 係數 0.5，結果如何？」<br>
-            📉 <b>可靠度查詢</b>：輸入「目前系統可靠度 (<i>R</i><sub><i>d</i></sub>) 是否達標？」
-            </p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        # ── 渲染歷史對話 ──
-        chat_html = '<div class="chat-container">'
-        for turn in st.session_state.chat_history:
-            chat_html += f'<div class="chat-label-user">您</div>'
-            chat_html += f'<div class="chat-bubble-user">{turn["user"]}</div>'
-            chat_html += f'<div class="chat-label-ai">🤖 AI 戰情助理</div>'
-            chat_html += f'<div class="chat-bubble-ai">{turn["ai"]}</div>'
-            # 若有模擬數據摘要，顯示在回覆下方
-            if turn.get("sim_summary"):
-                s = turn["sim_summary"]
-                rd_color = "#4cd37a" if s["rd"] > 0.95 else "#ffd86b" if s["rd"] >= 0.9 else "#ff6b6b"
-                cb_color = "#4cd37a" if s["carbon"] <= 70 else "#ffd86b" if s["carbon"] <= 100 else "#ff6b6b"
-                chat_html += f'''<div style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; margin: 4px 60px 8px 0; font-size: 0.85rem; color: #aac4d8;">
-                    📊 <b style="color:#f3a21a">模擬摘要</b>&nbsp;&nbsp;
-                    <i>d</i>={s["d"]}&nbsp;&nbsp;
-                    <i>t</i><sub>b</sub>={s["tb"]}&nbsp;&nbsp;
-                    CO₂ 係數={s["cf"]}&nbsp;&nbsp;
-                    <span style="color:{rd_color}"><i>R</i><sub><i>d</i></sub>={s["rd"]:.4f}</span>&nbsp;&nbsp;
-                    <span style="color:{cb_color}">總碳排放={s["carbon"]:.1f} kg</span>
-                </div>'''
-        chat_html += '</div>'
-        st.markdown(chat_html, unsafe_allow_html=True)
-
-    # ── 處理快速提問 ──
     pending_q = st.session_state.pop("pending_quick_q", None)
-
-    # ── 對話輸入框 ──
     user_input = st.chat_input("💬 請輸入您的問題（例：如果產量改成15000，系統可靠度還安全嗎？）")
-
-    # 合併快速提問或手動輸入
     final_query = pending_q or user_input
 
     if final_query:
-        if not api_key_chat:
-            st.error("⚠️ 請先在上方輸入 Gemini API Key！")
+        if not GROQ_API_KEYS or all("你的" in k for k in GROQ_API_KEYS):
+            st.error("⚠️ 請先在程式碼頂部填入有效的 Groq API Key（GROQ_API_KEYS 列表）！")
         elif not STATION_DATA_CHAT:
             st.error("⚠️ 無有效工作站資料，請先在「資料管理」頁面設定。")
         else:
             with st.spinner("🤖 AI 戰情助理分析中..."):
                 try:
-                    genai.configure(api_key=api_key_chat)
-                    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    if not available_models:
-                        st.error("找不到支援的 Gemini 模型。")
-                        st.stop()
-                    model_chat = genai.GenerativeModel(available_models[0])
+                    groq_client = get_groq_client()
 
-                    # 當前參數
                     current_params = {
-                        "d": st.session_state.sim_d,
+                        "d":  st.session_state.sim_d,
                         "tb": st.session_state.sim_tb,
-                        "cf": st.session_state.sim_cf
+                        "cf": st.session_state.sim_cf,
                     }
-
-                    # 以當前參數計算指標（供 AI 參考）
                     current_metrics = calculate_metrics(
                         current_params["d"], current_params["cf"],
                         STATION_DATA_CHAT, current_params["tb"]
                     )
-
-                    # 單次 API 呼叫：同時抽取參數 + 生成回覆
                     extracted, ai_reply = call_ai_single(
-                        model_chat, final_query,
+                        groq_client, final_query,
                         current_params, current_metrics,
                         st.session_state.chat_history
                     )
-
-                    # 若參數有變化，重新計算模擬指標
                     sim_changed = (
                         extracted["d"] != current_params["d"] or
                         abs(extracted["tb"] - current_params["tb"]) > 0.001 or
                         abs(extracted["cf"] - current_params["cf"]) > 0.001
                     )
+                    sim_res = calculate_metrics(
+                        extracted["d"], extracted["cf"],
+                        STATION_DATA_CHAT, extracted["tb"]
+                    ) if sim_changed else current_metrics
 
-                    if sim_changed:
-                        sim_res = calculate_metrics(
-                            extracted["d"], extracted["cf"],
-                            STATION_DATA_CHAT, extracted["tb"]
-                        )
-                    else:
-                        sim_res = current_metrics
-
-                    # 儲存對話紀錄
                     st.session_state.chat_history.append({
                         "user": final_query,
                         "ai": ai_reply,
@@ -720,8 +752,6 @@ with tab_chat:
                             "carbon": sim_res.get("carbon_emission", 0)
                         } if sim_changed else None
                     })
-
-                    # 若 AI 建議更新參數，寫入中轉站
                     if sim_changed:
                         st.session_state.pending_ai_updates = extracted
                         st.toast("✅ 參數已由 AI 戰情助理自動更新，儀表板同步刷新", icon="🔄")
