@@ -351,6 +351,11 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
 
 【使用者最新訊息】
 {query}
+【限制規則】
+- 若使用者詢問與製造系統、生產線、可靠度、碳排放、工作站、參數調整完全無關的話題（例如：天氣、食物、娛樂、政治等），
+  請在 "reply" 欄位回覆：「這個問題目前不在製造系統戰情儀表板的服務範圍內。我可以協助分析生產線狀態、可靠度、碳排放或參數調整等內容，請重新提問。」
+  並將 d、tb、cf 全部設為 null。
+- 只有與工廠生產、系統參數、可靠度分析相關的問題才進行正式分析。
 
 【任務】
 請完成以下兩件事，並嚴格以純 JSON 格式輸出，不含任何 Markdown 標籤或說明文字：
@@ -358,14 +363,51 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
    - "d"：輸出量、產能、產量、需求量（整數）
    - "tb"：瓶胚厚度、厚度參數（浮點數）
    - "cf"：CO₂ 係數、碳排係數（浮點數）
-2. 生成專業回覆存入 "reply" 欄位（150～300 字），格式如下：
-   【現況分析】說明目前系統狀態與數值意義
-   【風險評估】指出潛在問題或警戒項目
-   【建議措施】給出 2～3 項具體可執行的改善建議
+2. 根據使用者問題的性質，自動選擇最適合的回覆格式（150～300 字）：
+
+   - 若使用者詢問「狀態/是否正常/達標/系統如何」類問題：
+     使用【現況分析】【風險評估】【建議措施】三段格式
+
+   - 若使用者詢問「哪個最高/最低/比較/排名」類問題：
+     直接點出答案，再補充原因與影響，不需強制分段
+
+   - 若使用者詢問「如果改成XX會怎樣/假設/模擬」類問題：
+     先說明模擬結果變化，再評估是否有風險，最後給建議
+
+   - 若使用者詢問「建議/怎麼改善/如何優化」類問題：
+     直接給出具體可執行建議，條列 2～3 點
+
+   - 若使用者詢問「為什麼/原因/怎麼造成」類問題：
+     用淺顯易懂的方式解釋原因，並舉例說明影響
+
+   - 若使用者詢問「趨勢/預測/未來」類問題：
+     根據目前數值推估未來走向，說明樂觀與悲觀情境
+
+   - 若使用者詢問「定義/什麼是/解釋」類問題：
+     簡短解釋名詞定義，並結合目前系統數值舉例說明
+
+   - 若使用者詢問「最佳值/最適參數/怎麼設定」類問題：
+     給出建議的參數範圍，並說明為何這個範圍最佳
+
+   - 若使用者進行閒聊或打招呼：
+     友善回應並引導回儀表板相關話題，50 字以內
+
+   - 若為簡單問答（查詢單一數值）：
+     簡短直接回答，不需要分段格式，100 字以內
+
+   - 若問題涉及多個面向（例如同時問可靠度與碳排）：
+     分別針對每個面向簡短說明，最後給一個綜合結論
 
 輸出格式範例：
-{{"d": null, "tb": 0.9, "cf": null, "reply": "【現況分析】...【風險評估】...【建議措施】..."}}"""
+{{"d": null, "tb": 0.9, "cf": null, "reply": "【現況分析】...【風險評估】...【建議措施】...", "chart": "loss"}}
 
+【chart 欄位規則】
+- "loss"：當使用者問耗損、哪站損失最高時
+- "energy"：當使用者問功率、用電、能耗時  
+- "carbon"：當使用者問碳排放、碳排哪站最高時
+- "reliability"：當使用者問可靠度敏感度、產量影響時
+- null：一般問答不需要圖表時
+"""
 
 def get_groq_client():
     """輪替嘗試所有 API Key，回傳可用的 Groq client"""
@@ -407,7 +449,8 @@ def call_ai_single(client, query: str, current_params: dict, current_metrics: di
             "cf": float(data["cf"]) if data.get("cf") is not None else current_params.get("cf"),
         }
         reply = data.get("reply", "（AI 戰情助理無法解析回覆，請重試。）")
-        return extracted, reply
+        chart = data.get("chart", None)
+        return extracted, reply, chart
     except Exception:
         return current_params.copy(), raw if raw else "（AI 戰情助理無法解析回覆，請重試。）"
 
@@ -630,10 +673,10 @@ with tab_chat:
             margin:0 0 8px 80px; color:#1a1a1a;
             font-size:1.05rem; line-height:1.75; }
         .chat-bubble-ai {
-    background: #0f2d3d;
-    border: 1.5px solid #1d9e75;
+    background: #1a1440;
+    border: 1.5px solid #7f77dd;
     border-radius:16px 16px 16px 4px; padding:13px 20px;
-    margin:0 80px 6px 0; color:#9fe1cb;
+    margin:0 80px 6px 0; color:#cecbf6;
     font-size:1.05rem; line-height:1.85; }
             box-shadow:0 2px 8px rgba(0,0,0,0.3); }
         .sim-summary {
@@ -662,6 +705,82 @@ with tab_chat:
                 f'<div class="chat-bubble-ai">{safe_ai}</div>',
                 unsafe_allow_html=True
             )
+            
+            # 圖表渲染
+            if turn.get("chart"):
+                chart_type = turn["chart"]
+                s = turn.get("sim_summary") or {
+                    "d": st.session_state.sim_d,
+                    "tb": st.session_state.sim_tb,
+                    "cf": st.session_state.sim_cf,
+                }
+                chart_metrics = calculate_metrics(
+                    s["d"], s["cf"], STATION_DATA_CHAT, s["tb"]
+                )
+                station_labels = ["吹瓶站", "充填站", "套標站", "包裝站", "疊棧站"]
+
+                if chart_type == "loss":
+                    fig = go.Figure(go.Bar(
+                        x=station_labels, y=chart_metrics["losses"],
+                        marker_color='#ff6b6b', name="耗損量"
+                    ))
+                    fig.update_layout(
+                        title=dict(text="各工作站耗損量", font=dict(size=16, color='black')),
+                        paper_bgcolor='white', plot_bgcolor='white',
+                        height=280, margin=dict(l=10, r=10, t=40, b=10),
+                        xaxis=dict(tickfont=dict(size=13, color='black')),
+                        yaxis=dict(tickfont=dict(size=13, color='black'))
+                    )
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_loss")
+
+                elif chart_type == "energy":
+                    fig = go.Figure(go.Bar(
+                        x=station_labels, y=chart_metrics["energies"],
+                        marker_color='#ffcf60', name="動態功率"
+                    ))
+                    fig.update_layout(
+                        title=dict(text="各工作站動態功率 (kW)", font=dict(size=16, color='black')),
+                        paper_bgcolor='white', plot_bgcolor='white',
+                        height=280, margin=dict(l=10, r=10, t=40, b=10),
+                        xaxis=dict(tickfont=dict(size=13, color='black')),
+                        yaxis=dict(tickfont=dict(size=13, color='black'))
+                    )
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_energy")
+
+                elif chart_type == "carbon":
+                    fig = go.Figure(go.Bar(
+                        x=station_labels, y=chart_metrics["carbons"],
+                        marker_color='#4cd37a', name="碳排放"
+                    ))
+                    fig.update_layout(
+                        title=dict(text="各工作站碳排放 (kg)", font=dict(size=16, color='black')),
+                        paper_bgcolor='white', plot_bgcolor='white',
+                        height=280, margin=dict(l=10, r=10, t=40, b=10),
+                        xaxis=dict(tickfont=dict(size=13, color='black')),
+                        yaxis=dict(tickfont=dict(size=13, color='black'))
+                    )
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_carbon")
+
+                elif chart_type == "reliability":
+                    d_range = list(range(5000, s["d"] + 5000, 500))
+                    y_vals = [calculate_metrics(dv, s["cf"], STATION_DATA_CHAT, s["tb"])["reliability"] for dv in d_range]
+                    fig = go.Figure(go.Scatter(
+                        x=d_range, y=y_vals, mode='lines+markers',
+                        line=dict(color='#3fe6ff', width=2)
+                    ))
+                    fig.add_trace(go.Scatter(
+                        x=[s["d"]], y=[chart_metrics["reliability"]],
+                        mode='markers', marker=dict(size=12, color='#ffd86b'),
+                        name=f'當前 d={s["d"]}'
+                    ))
+                    fig.update_layout(
+                        title=dict(text="可靠度敏感度分析", font=dict(size=16, color='black')),
+                        paper_bgcolor='white', plot_bgcolor='white',
+                        height=280, margin=dict(l=10, r=10, t=40, b=10),
+                        xaxis=dict(tickfont=dict(size=13, color='black')),
+                        yaxis=dict(tickfont=dict(size=13, color='black'), range=[0, 1.05])
+                    )
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_rel")
 
             if turn.get("sim_summary"):
                 s = turn["sim_summary"]
@@ -727,7 +846,7 @@ with tab_chat:
                         current_params["d"], current_params["cf"],
                         STATION_DATA_CHAT, current_params["tb"]
                     )
-                    extracted, ai_reply = call_ai_single(
+                    extracted, ai_reply, ai_chart = call_ai_single(
                         groq_client, final_query,
                         current_params, current_metrics,
                         st.session_state.chat_history
@@ -745,6 +864,7 @@ with tab_chat:
                     st.session_state.chat_history.append({
                         "user": final_query,
                         "ai": ai_reply,
+                        "chart": ai_chart,
                         "time": datetime.now().strftime("%H:%M"),
                         "sim_summary": {
                             "d": extracted["d"], "tb": extracted["tb"], "cf": extracted["cf"],
