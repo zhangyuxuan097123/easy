@@ -9,9 +9,10 @@ import io
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-from groq import Groq
+import google.generativeai as genai
 import json
 import html as html_lib
+import re
 
 # --- 輔助函式：產生 a 的斜體加下標字元 ---
 def get_a_subscript(val):
@@ -25,12 +26,21 @@ st.set_page_config(
 )
 
 # ── 內建 Groq API Keys（可填入多組，系統自動輪替）──
-GROQ_API_KEYS = [
-    "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",   # 替換成你的第一組 Groq Key
-    "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",   # 替換成你的第二組 Groq Key
-    # 可繼續新增...
+GOOGLE_API_KEYS = [
+    "AIzaSyDjtgbYpRDDz96Xj9hQgr8cDWEFcxj_rBg",
+    "AIzaSyBJnYu9EVONHxX9WcH_cr3mINRhG46ZFCU",
+    "AIzaSyBvfpViaFaEDO0zrPw0YzSSeN37CMMDZhU",
+    "AIzaSyDYx91ChlKN3ZEARr8ucDCXx9KzLBHL-YM",
+    "AIzaSyB-azQJOSh8PU0zbTnhDybzNMEZHe9W9uQ",
+    "AIzaSyDjmhU6w3nCB9itp553fr7Pnk9op9trfAM",
+    "AIzaSyDO4tUkjuqt-5buMgEDN7tniL-rSZZu6wc",
+    "AIzaSyDJ2-Qp6yQvApYueB_BQRe5up8NcOw8IEE",
+    "AIzaSyA4eqtMisMxR3pY4YLRgS8BgvWrvFY6lMY",
+    "AIzaSyCqkJ0f-dMIQWjqqCHZzoyJ5kCHpzsOBLo",
+    "AIzaSyA-zPSk971iGt-rloi0PPSguoKH4uSjLzM",
+    "AIzaSyDnyk8iRJjoIExd-YDacQ4SrMvj8r8N7Tw",
 ]
-GROQ_MODEL = "llama-3.3-70b-versatile"  # 可改成 "gemma2-9b-it" 或 "mixtral-8x7b-32768"
+GEMINI_MODEL = "gemini-1.5-pro"  # 或 "gemini-1.5-pro"
 
 DEFAULT_EXCEL_PATH = "!!!最新版簡單!!!.xlsx"
 
@@ -409,50 +419,117 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
 - null：一般問答不需要圖表時
 """
 
-def get_groq_client():
-    """輪替嘗試所有 API Key，回傳可用的 Groq client"""
+def get_gemini_client():
+    """輪替嘗試所有 Google API Key，並自動處理 429 流量限制"""
+    import time # 確保有引入 time 模組
+    
     last_err = None
-    for key in GROQ_API_KEYS:
+    for key_index, key in enumerate(GOOGLE_API_KEYS):
         try:
-            client = Groq(api_key=key)
-            # 以極小請求驗證 key 有效性
-            client.chat.completions.create(
-                model=GROQ_MODEL,
-                messages=[{"role": "user", "content": "hi"}],
-                max_tokens=5
-            )
-            return client
-        except Exception as e:
-            last_err = e
-            continue
-    raise Exception(f"所有 Groq API Key 均無法使用。最後錯誤：{last_err}")
+            genai.configure(api_key=key)
+            
+            # 取得可用模型清單
+            available_models = [
+                m.name for m in genai.list_models() 
+                if 'generateContent' in m.supported_generation_methods
+            ]
+            
+            if not available_models:
+                continue # 這個金鑰沒權限，換下一個
 
+            # 優先選擇模型
+            target_model_name = None
+            for m_name in available_models:
+                if "gemini-1.5-flash" in m_name: # Flash 版速度快、免費額度較高
+                    target_model_name = m_name
+                    break
+            
+            if not target_model_name:
+                target_model_name = available_models[0] # 保底
+
+            model = genai.GenerativeModel(target_model_name)
+            return model
+            
+        except Exception as e:
+            error_msg = str(e)
+            last_err = e
+            
+            # 如果遇到 429 Quota Exceeded (流量限制)
+            if "429" in error_msg or "Quota" in error_msg:
+                st.warning(f"⚠️ 第 {key_index + 1} 把金鑰觸發流量限制，嘗試切換下一把...")
+                time.sleep(2) # 稍微停頓 2 秒，避免瞬間發送太多請求把其他金鑰也卡死
+                continue
+            else:
+                # 其他錯誤也先換下一把金鑰
+                continue
+                
+    # 如果全部金鑰都失敗了，強制等待一段時間再丟出錯誤
+    raise Exception(f"所有金鑰目前皆達到流量上限或失效。請等待 1 分鐘後再重新提問！最後錯誤：{last_err}")
 
 def call_ai_single(client, query: str, current_params: dict, current_metrics: dict, chat_history: list):
-    """單次 Groq API 呼叫：同時完成參數抽取與回覆生成"""
+    """單次 Gemini API 呼叫：支援 JSON 與純文字格式的暴力解析"""
+    import re # 確保使用正則表達式
+    
     prompt = build_combined_prompt(query, current_params, current_metrics, chat_history)
-
-    resp = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=2048,
-        temperature=0.3,
+    generation_config = genai.types.GenerationConfig(
+        max_output_tokens=2048,
+        temperature=0.2, # 降低溫度，讓 AI 不要亂發揮
     )
-    raw = resp.choices[0].message.content.strip()
-    raw = raw.replace("```json", "").replace("```", "").strip()
+    
+    try:
+        resp = client.generate_content(prompt, generation_config=generation_config)
+        raw = resp.text.strip()
+        raw = raw.replace("```json", "").replace("```", "").strip()
+    except Exception as e:
+        return current_params.copy(), f"API 呼叫發生錯誤：{str(e)}", None
 
+    # 第一關：先嘗試標準的 JSON 解析 (如果 AI 乖乖聽話的話)
     try:
         data = json.loads(raw)
         extracted = {
-            "d":  int(data["d"])    if data.get("d")  is not None else current_params.get("d"),
+            "d":  int(data["d"])    if data.get("d") is not None else current_params.get("d"),
             "tb": float(data["tb"]) if data.get("tb") is not None else current_params.get("tb"),
             "cf": float(data["cf"]) if data.get("cf") is not None else current_params.get("cf"),
         }
-        reply = data.get("reply", "（AI 戰情助理無法解析回覆，請重試。）")
+        reply = data.get("reply", "（無回覆內容）")
         chart = data.get("chart", None)
         return extracted, reply, chart
+        
     except Exception:
-        return current_params.copy(), raw if raw else "（AI 戰情助理無法解析回覆，請重試。）"
+        # 第二關：啟動「暴力萃取」，專治不守規矩的 AI
+        
+        # 1. 強硬抓取數字參數 (找 d: 10000 這種格式)
+        d_match = re.search(r'["\']?d["\']?\s*:\s*([\d\.]+)', raw)
+        tb_match = re.search(r'["\']?tb["\']?\s*:\s*([\d\.]+)', raw)
+        cf_match = re.search(r'["\']?cf["\']?\s*:\s*([\d\.]+)', raw)
+        
+        extracted = {
+            "d": int(float(d_match.group(1))) if d_match else current_params.get("d"),
+            "tb": float(tb_match.group(1)) if tb_match else current_params.get("tb"),
+            "cf": float(cf_match.group(1)) if cf_match else current_params.get("cf")
+        }
+        
+        # 2. 強硬抓取對話內容 (找出 reply: 後面的所有中文字)
+        # 這段語法會忽略前後引號，直接把回覆本體挖出來
+        reply_match = re.search(r'["\']?reply["\']?\s*:\s*["\']?(.*?)(?:,?\s*["\']?chart["\']?\s*:|$)', raw, re.DOTALL | re.IGNORECASE)
+        
+        if reply_match:
+            reply_text = reply_match.group(1).strip()
+            # 拔除尾巴可能殘留的 } 括號或引號
+            reply_text = re.sub(r'["\'\}]+$', '', reply_text) 
+            # 把 \\n 換成真正的換行
+            reply_text = reply_text.replace('\\n', '\n').replace('\n', '<br>')
+        else:
+            # 最壞情況：連 reply 都找不到，就把英文字段全部刪除，只留中文
+            reply_text = re.sub(r'["\']?[dtbcfchart]+["\']?\s*:\s*[A-Za-z0-9\.\-\_]*\s*,?', '', raw, flags=re.IGNORECASE)
+            reply_text = re.sub(r'[{}]', '', reply_text).strip()
+            
+        # 3. 嘗試抓取 chart 標籤
+        chart_match = re.search(r'["\']?chart["\']?\s*:\s*["\']?([a-zA-Z]+)', raw)
+        chart_val = chart_match.group(1) if chart_match else None
+        if chart_val == "null": chart_val = None
+            
+        return extracted, reply_text, chart_val
 
 
 # ============================================================
@@ -673,11 +750,11 @@ with tab_chat:
             margin:0 0 8px 80px; color:#1a1a1a;
             font-size:1.05rem; line-height:1.75; }
         .chat-bubble-ai {
-    background: #1a1440;
-    border: 1.5px solid #7f77dd;
-    border-radius:16px 16px 16px 4px; padding:13px 20px;
-    margin:0 80px 6px 0; color:#cecbf6;
-    font-size:1.05rem; line-height:1.85; }
+            background: #1a1440;
+            border: 1.5px solid #7f77dd;
+            border-radius:16px 16px 16px 4px; padding:13px 20px;
+            margin:0 80px 6px 0; color:#cecbf6;
+            font-size:1.05rem; line-height:1.85;
             box-shadow:0 2px 8px rgba(0,0,0,0.3); }
         .sim-summary {
             background:rgba(255,255,255,0.04);
@@ -828,14 +905,14 @@ with tab_chat:
     final_query = pending_q or user_input
 
     if final_query:
-        if not GROQ_API_KEYS or all("你的" in k for k in GROQ_API_KEYS):
-            st.error("⚠️ 請先在程式碼頂部填入有效的 Groq API Key（GROQ_API_KEYS 列表）！")
+        if not GOOGLE_API_KEYS or all("你的" in k for k in GOOGLE_API_KEYS):
+            st.error("⚠️ 請先在程式碼頂部填入有效的 Google API Key（GOOGLE_API_KEYS 列表）！")
         elif not STATION_DATA_CHAT:
             st.error("⚠️ 無有效工作站資料，請先在「資料管理」頁面設定。")
         else:
             with st.spinner("🤖 AI 戰情助理分析中..."):
                 try:
-                    groq_client = get_groq_client()
+                    gemini_client = get_gemini_client()
 
                     current_params = {
                         "d":  st.session_state.sim_d,
@@ -847,7 +924,7 @@ with tab_chat:
                         STATION_DATA_CHAT, current_params["tb"]
                     )
                     extracted, ai_reply, ai_chart = call_ai_single(
-                        groq_client, final_query,
+                        gemini_client, final_query,
                         current_params, current_metrics,
                         st.session_state.chat_history
                     )
