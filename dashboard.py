@@ -38,8 +38,7 @@ GOOGLE_API_KEYS = [
         os.getenv("GOOGLE_API_KEY_2"),
     ] if k
 ]
-GEMINI_MODEL = "gemini-1.5-flash"  # 或 "gemini-1.5-pro"
-
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 DEFAULT_EXCEL_PATH = "!!!最新版簡單!!!.xlsx"
 
 # ============================================================
@@ -418,32 +417,37 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
 """
 
 def get_gemini_client():
-    """輪替嘗試所有 Google API Key，並自動處理 429 流量限制"""
-    import time # 確保有引入 time 模組
-    
     last_err = None
     for key_index, key in enumerate(GOOGLE_API_KEYS):
         try:
             genai.configure(api_key=key)
             
-            # 取得可用模型清單
             available_models = [
                 m.name for m in genai.list_models() 
                 if 'generateContent' in m.supported_generation_methods
             ]
             
             if not available_models:
-                continue # 這個金鑰沒權限，換下一個
+                continue
 
-            # 優先選擇模型
+            # 優先順序：2.5-flash-lite > 2.5-flash > 2.5-pro > 其他
+            preferred = [
+                "gemini-2.5-flash-lite",
+                "gemini-2.5-flash",
+                "gemini-2.5-pro",
+            ]
+            
             target_model_name = None
-            for m_name in available_models:
-                if "gemini-1.5-flash" in m_name: # Flash 版速度快、免費額度較高
-                    target_model_name = m_name
+            for pref in preferred:
+                for m_name in available_models:
+                    if pref in m_name:
+                        target_model_name = m_name
+                        break
+                if target_model_name:
                     break
             
             if not target_model_name:
-                target_model_name = available_models[0] # 保底
+                target_model_name = available_models[0]
 
             model = genai.GenerativeModel(target_model_name)
             return model
@@ -451,18 +455,14 @@ def get_gemini_client():
         except Exception as e:
             error_msg = str(e)
             last_err = e
-            
-            # 如果遇到 429 Quota Exceeded (流量限制)
             if "429" in error_msg or "Quota" in error_msg:
                 st.warning(f"⚠️ 第 {key_index + 1} 把金鑰觸發流量限制，嘗試切換下一把...")
-                time.sleep(2) # 稍微停頓 2 秒，避免瞬間發送太多請求把其他金鑰也卡死
+                time.sleep(2)
                 continue
             else:
-                # 其他錯誤也先換下一把金鑰
                 continue
                 
-    # 如果全部金鑰都失敗了，強制等待一段時間再丟出錯誤
-    raise Exception(f"所有金鑰目前皆達到流量上限或失效。請等待 1 分鐘後再重新提問！最後錯誤：{last_err}")
+    raise Exception(f"所有金鑰目前皆達到流量上限或失效。請等待後再試！最後錯誤：{last_err}")
 
 def call_ai_single(client, query: str, current_params: dict, current_metrics: dict, chat_history: list):
     """單次 Gemini API 呼叫：支援 JSON 與純文字格式的暴力解析"""
