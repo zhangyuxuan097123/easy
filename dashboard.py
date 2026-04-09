@@ -1,10 +1,11 @@
+from dotenv import load_dotenv
+import os
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import math
 import itertools
-import os
 import io
 import time
 from datetime import datetime
@@ -13,6 +14,8 @@ import google.generativeai as genai
 import json
 import html as html_lib
 import re
+
+load_dotenv()  # 讀取 .env 檔案
 
 # --- 輔助函式：產生 a 的斜體加下標字元 ---
 def get_a_subscript(val):
@@ -27,18 +30,10 @@ st.set_page_config(
 
 # ── 內建 Groq API Keys（可填入多組，系統自動輪替）──
 GOOGLE_API_KEYS = [
-    "AIzaSyDjtgbYpRDDz96Xj9hQgr8cDWEFcxj_rBg",
-    "AIzaSyBJnYu9EVONHxX9WcH_cr3mINRhG46ZFCU",
-    "AIzaSyBvfpViaFaEDO0zrPw0YzSSeN37CMMDZhU",
-    "AIzaSyDYx91ChlKN3ZEARr8ucDCXx9KzLBHL-YM",
-    "AIzaSyB-azQJOSh8PU0zbTnhDybzNMEZHe9W9uQ",
-    "AIzaSyDjmhU6w3nCB9itp553fr7Pnk9op9trfAM",
-    "AIzaSyDO4tUkjuqt-5buMgEDN7tniL-rSZZu6wc",
-    "AIzaSyDJ2-Qp6yQvApYueB_BQRe5up8NcOw8IEE",
-    "AIzaSyA4eqtMisMxR3pY4YLRgS8BgvWrvFY6lMY",
-    "AIzaSyCqkJ0f-dMIQWjqqCHZzoyJ5kCHpzsOBLo",
-    "AIzaSyA-zPSk971iGt-rloi0PPSguoKH4uSjLzM",
-    "AIzaSyDnyk8iRJjoIExd-YDacQ4SrMvj8r8N7Tw",
+    k for k in [
+        os.getenv("GOOGLE_API_KEY_1"),
+        os.getenv("GOOGLE_API_KEY_2"),
+    ] if k
 ]
 GEMINI_MODEL = "gemini-1.5-pro"  # 或 "gemini-1.5-pro"
 
