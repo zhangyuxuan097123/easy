@@ -1,5 +1,3 @@
-from dotenv import load_dotenv
-import os
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -14,8 +12,13 @@ import google.generativeai as genai
 import json
 import html as html_lib
 import re
+import os
 
-load_dotenv()  # 讀取 .env 檔案
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
 # --- 輔助函式：產生 a 的斜體加下標字元 ---
 def get_a_subscript(val):
