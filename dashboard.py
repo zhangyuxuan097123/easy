@@ -417,52 +417,42 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
 """
 
 def get_gemini_client():
+    # 直接指定模型，不透過 list_models() 動態偵測（避免字串比對錯誤）
+    MODEL_PRIORITY = [
+        "gemini-2.5-flash-lite-preview-06-17",  # 最新 lite 版
+        "gemini-2.5-flash-lite",                 # 穩定 lite 版
+        "gemini-2.5-flash",                      # 備用（每日僅 20 次，盡量不用）
+    ]
+
     last_err = None
     for key_index, key in enumerate(GOOGLE_API_KEYS):
-        try:
-            genai.configure(api_key=key)
-            
-            available_models = [
-                m.name for m in genai.list_models() 
-                if 'generateContent' in m.supported_generation_methods
-            ]
-            
-            if not available_models:
-                continue
+        for model_name in MODEL_PRIORITY:
+            try:
+                genai.configure(api_key=key)
+                model = genai.GenerativeModel(model_name)
+                # 用極短 prompt 測試這個模型是否可用
+                test = model.generate_content(
+                    "hi",
+                    generation_config=genai.types.GenerationConfig(max_output_tokens=5)
+                )
+                return model  # 成功就直接回傳
 
-            # 優先順序：2.5-flash-lite > 2.5-flash > 2.5-pro > 其他
-            preferred = [
-                "gemini-2.5-flash-lite",
-                "gemini-2.5-flash",
-                "gemini-2.5-pro",
-            ]
-            
-            target_model_name = None
-            for pref in preferred:
-                for m_name in available_models:
-                    if pref in m_name:
-                        target_model_name = m_name
-                        break
-                if target_model_name:
+            except Exception as e:
+                error_msg = str(e)
+                last_err = e
+                if "429" in error_msg or "Quota" in error_msg:
+                    # 這個模型配額用完，換下一個模型
+                    continue
+                elif "not found" in error_msg.lower() or "404" in error_msg:
+                    # 這個模型名稱不存在，換下一個
+                    continue
+                else:
+                    # 其他錯誤，換下一把金鑰
                     break
-            
-            if not target_model_name:
-                target_model_name = available_models[0]
 
-            model = genai.GenerativeModel(target_model_name)
-            return model
-            
-        except Exception as e:
-            error_msg = str(e)
-            last_err = e
-            if "429" in error_msg or "Quota" in error_msg:
-                st.warning(f"⚠️ 第 {key_index + 1} 把金鑰觸發流量限制，嘗試切換下一把...")
-                time.sleep(2)
-                continue
-            else:
-                continue
-                
-    raise Exception(f"所有金鑰目前皆達到流量上限或失效。請等待後再試！最後錯誤：{last_err}")
+        time.sleep(1)
+
+    raise Exception(f"所有金鑰與模型組合均失敗。最後錯誤：{last_err}")
 
 def call_ai_single(client, query: str, current_params: dict, current_metrics: dict, chat_history: list):
     """單次 Gemini API 呼叫：支援 JSON 與純文字格式的暴力解析"""
