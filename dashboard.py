@@ -38,7 +38,7 @@ GOOGLE_API_KEYS = [
         os.getenv("GOOGLE_API_KEY_2"),
     ] if k
 ]
-GEMINI_MODEL = "gemini-1.5-pro"  # 或 "gemini-1.5-pro"
+GEMINI_MODEL = "gemini-1.5-flash"  # 或 "gemini-1.5-pro"
 
 DEFAULT_EXCEL_PATH = "!!!最新版簡單!!!.xlsx"
 
