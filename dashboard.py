@@ -759,6 +759,16 @@ with tab_chat:
             safe_ai = safe_ai.replace("【現況分析】", "<br><b style='color:#3fe6ff'>【現況分析】</b>")
             safe_ai = safe_ai.replace("【風險評估】", "<br><b style='color:#ffd86b'>【風險評估】</b>")
             safe_ai = safe_ai.replace("【建議措施】", "<br><b style='color:#4cd37a'>【建議措施】</b>")
+            
+            # --- 新增這幾行來處理 Rd 的顯示 ---
+            # 處理 AI 可能輸出的各種 R_d 變形
+            safe_ai = safe_ai.replace("𝑅ᵈ", "<i>R</i><sub>d</sub>")
+            safe_ai = safe_ai.replace("Rᵈ", "<i>R</i><sub>d</sub>")
+            safe_ai = safe_ai.replace("R_d", "<i>R</i><sub>d</sub>")
+            # 處理直接連著寫的 Rd (確保不是其他英文單字的一部分)
+            import re
+            safe_ai = re.sub(r'\bRd\b', '<i>R</i><sub>d</sub>', safe_ai)
+            # -----------------------------------
 
             st.markdown(
                 f'<div class="chat-label-user">您</div>'
