@@ -5,3 +5,4 @@ plotly
 python-dotenv
 google-genai
 openpyxl
+google-generativeai
