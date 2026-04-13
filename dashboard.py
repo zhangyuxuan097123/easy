@@ -8,7 +8,7 @@ import io
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-import google.generativeai as genai
+from google import genai
 import json
 import html as html_lib
 import re
@@ -32,15 +32,29 @@ st.set_page_config(
 )
  
 # ── 內建 Google API Keys（可填入多組，系統自動輪替）──
-GOOGLE_API_KEYS = [
-    k for k in [
-        os.getenv("GOOGLE_API_KEY_1"),
-        os.getenv("GOOGLE_API_KEY_2"),
-    ] if k
-]
+def get_api_keys():
+    keys = []
+    # 優先讀取 Streamlit Secrets（雲端環境）
+    try:
+        keys = [
+            st.secrets.get(f"GOOGLE_API_KEY_{i}")
+            for i in range(1, 16)  # 1 到 15
+        ]
+        keys = [k for k in keys if k]
+    except:
+        pass
+    # 若沒有則讀取 .env（本地環境）
+    if not keys:
+        keys = [
+            os.getenv(f"GOOGLE_API_KEY_{i}")
+            for i in range(1, 16)  # 1 到 15
+        ]
+        keys = [k for k in keys if k]
+    return keys
+
+GOOGLE_API_KEYS = get_api_keys()
  
 MODEL_PRIORITY = [
-    "gemini-2.5-flash-lite-preview-06-17",
     "gemini-2.5-flash-lite",
     "gemini-2.5-flash",
 ]
@@ -424,24 +438,24 @@ def build_combined_prompt(query: str, current_params: dict, current_metrics: dic
  
  
 def call_ai_single(query: str, current_params: dict, current_metrics: dict, chat_history: list):
-    """
-    直接用真實 prompt 嘗試每個 (key, model) 組合。
-    遇到配額 / 模型不存在才換下一組，成功即停止回傳。
-    正常情況下只消耗 1 次 API 呼叫。
-    """
     prompt = build_combined_prompt(query, current_params, current_metrics, chat_history)
-    generation_config = genai.types.GenerationConfig(max_output_tokens=2048, temperature=0.2)
- 
+
     last_err = None
     for key in GOOGLE_API_KEYS:
         for model_name in MODEL_PRIORITY:
             try:
-                genai.configure(api_key=key)
-                model = genai.GenerativeModel(model_name)
-                resp  = model.generate_content(prompt, generation_config=generation_config)
-                raw   = resp.text.strip().replace("```json", "").replace("```", "").strip()
- 
-                # ── 第一關：標準 JSON 解析 ──────────────────────
+                client = genai.Client(api_key=key)
+                resp = client.models.generate_content(
+                    model=model_name,
+                    contents=prompt,
+                    config=genai.types.GenerateContentConfig(
+                        max_output_tokens=2048,
+                        temperature=0.2,
+                    )
+                )
+                raw = resp.text.strip().replace("```json", "").replace("```", "").strip()
+
+                # ── 第一關：標準 JSON 解析 ──
                 try:
                     data = json.loads(raw)
                     extracted = {
@@ -450,9 +464,9 @@ def call_ai_single(query: str, current_params: dict, current_metrics: dict, chat
                         "cf": float(data["cf"]) if data.get("cf") is not None else current_params.get("cf"),
                     }
                     return extracted, data.get("reply", "（無回覆內容）"), data.get("chart")
- 
+
                 except Exception:
-                    # ── 第二關：暴力萃取 ────────────────────────
+                    # ── 第二關：暴力萃取 ──
                     d_match  = re.search(r'["\']?d["\']?\s*:\s*([\d\.]+)', raw)
                     tb_match = re.search(r'["\']?tb["\']?\s*:\s*([\d\.]+)', raw)
                     cf_match = re.search(r'["\']?cf["\']?\s*:\s*([\d\.]+)', raw)
@@ -478,15 +492,15 @@ def call_ai_single(query: str, current_params: dict, current_metrics: dict, chat
                     chart_val   = chart_match.group(1) if chart_match else None
                     if chart_val == "null": chart_val = None
                     return extracted, reply_text, chart_val
- 
+
             except Exception as e:
                 last_err = str(e)
                 if any(code in last_err for code in ["429", "Quota", "not found", "404"]):
-                    continue   # 配額用完或模型不存在 → 換下一個模型
-                break          # 其他錯誤 → 換金鑰
- 
-        time.sleep(0.5)        # 換金鑰前稍等，避免觸發速率限制
- 
+                    continue
+                break
+
+        time.sleep(0.5)
+
     return current_params.copy(), f"所有金鑰與模型均失敗。最後錯誤：{last_err}", None
  
  
@@ -723,7 +737,7 @@ with tab_chat:
         </style>
         """, unsafe_allow_html=True)
  
-        for turn in st.session_state.chat_history:
+        for idx, turn in enumerate(st.session_state.chat_history):
             safe_user = html_lib.escape(turn["user"])
             safe_ai   = html_lib.escape(turn["ai"]).replace("\n", "<br>")
             safe_ai   = safe_ai.replace("【現況分析】", "<br><b style='color:#3fe6ff'>【現況分析】</b>")
@@ -759,17 +773,17 @@ with tab_chat:
                 if chart_type == "loss":
                     fig = go.Figure(go.Bar(x=station_labels, y=chart_metrics["losses"], marker_color='#ff6b6b', name="耗損量"))
                     fig.update_layout(title=dict(text="各工作站耗損量", font=dict(size=16, color='black')), paper_bgcolor='white', plot_bgcolor='white', height=280, margin=dict(l=10, r=10, t=40, b=10), xaxis=dict(tickfont=dict(size=13, color='black')), yaxis=dict(tickfont=dict(size=13, color='black')))
-                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_loss")
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{idx}_loss")
  
                 elif chart_type == "energy":
                     fig = go.Figure(go.Bar(x=station_labels, y=chart_metrics["energies"], marker_color='#ffcf60', name="動態功率"))
                     fig.update_layout(title=dict(text="各工作站動態功率 (kW)", font=dict(size=16, color='black')), paper_bgcolor='white', plot_bgcolor='white', height=280, margin=dict(l=10, r=10, t=40, b=10), xaxis=dict(tickfont=dict(size=13, color='black')), yaxis=dict(tickfont=dict(size=13, color='black')))
-                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_energy")
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{idx}_energy")
  
                 elif chart_type == "carbon":
                     fig = go.Figure(go.Bar(x=station_labels, y=chart_metrics["carbons"], marker_color='#4cd37a', name="碳排放"))
                     fig.update_layout(title=dict(text="各工作站碳排放 (kg)", font=dict(size=16, color='black')), paper_bgcolor='white', plot_bgcolor='white', height=280, margin=dict(l=10, r=10, t=40, b=10), xaxis=dict(tickfont=dict(size=13, color='black')), yaxis=dict(tickfont=dict(size=13, color='black')))
-                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_carbon")
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{idx}_carbon")
  
                 elif chart_type == "reliability":
                     d_range = list(range(5000, s["d"] + 5000, 500))
@@ -777,7 +791,7 @@ with tab_chat:
                     fig = go.Figure(go.Scatter(x=d_range, y=y_vals, mode='lines+markers', line=dict(color='#3fe6ff', width=2)))
                     fig.add_trace(go.Scatter(x=[s["d"]], y=[chart_metrics["reliability"]], mode='markers', marker=dict(size=12, color='#ffd86b'), name=f'當前 d={s["d"]}'))
                     fig.update_layout(title=dict(text="可靠度敏感度分析", font=dict(size=16, color='black')), paper_bgcolor='white', plot_bgcolor='white', height=280, margin=dict(l=10, r=10, t=40, b=10), xaxis=dict(tickfont=dict(size=13, color='black')), yaxis=dict(tickfont=dict(size=13, color='black'), range=[0, 1.05]))
-                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{turn['time']}_rel")
+                    st.plotly_chart(fig, use_container_width=True, key=f"chat_chart_{idx}_rel")
  
             if turn.get("sim_summary"):
                 s        = turn["sim_summary"]
